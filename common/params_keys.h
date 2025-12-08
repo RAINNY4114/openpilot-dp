@@ -133,6 +133,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"dp_dev_reset_conf", {CLEAR_ON_MANAGER_START, BOOL, "0"}},
     {"dp_dev_beep", {PERSISTENT, BOOL, "0"}},
     {"dp_dev_is_rhd", {PERSISTENT, BOOL, "0"}},
+    {"dp_dev_monitoring_disabled", {PERSISTENT, BOOL, "0"}},
     {"dp_lat_alka", {PERSISTENT, BOOL, "0"}},
     {"dp_ui_display_mode", {PERSISTENT, INT, "0"}},
     {"dp_dev_model_selected", {PERSISTENT, STRING}},
@@ -161,4 +162,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"dp_vag_a0_sng", {PERSISTENT, BOOL, "0"}},
     {"dp_vag_pq_steering_patch", {PERSISTENT, BOOL, "0"}},
     {"dp_vag_avoid_eps_lockout", {PERSISTENT, BOOL, "0"}},
+    {"dp_ui_four", {PERSISTENT, BOOL, "0"}},
+    {"dp_lincoln_bsm_voice_enabled", {PERSISTENT, BOOL, "0"}},
+    {"dp_lincoln_bsm_voice_interval_sec", {PERSISTENT, INT, "3"}},
+    {"dp_lincoln_bsm_voice_volume_pct", {PERSISTENT, INT, "100"}},
 };

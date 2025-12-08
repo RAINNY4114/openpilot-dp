@@ -5,6 +5,7 @@ from collections.abc import Callable
 from openpilot.selfdrive.ui.layouts.settings.developer import DeveloperLayout
 from openpilot.selfdrive.ui.layouts.settings.device import DeviceLayout
 from openpilot.selfdrive.ui.layouts.settings.firehose import FirehoseLayout
+from openpilot.selfdrive.ui.layouts.settings.lincoln import LincolnLayout
 from openpilot.selfdrive.ui.layouts.settings.software import SoftwareLayout
 from openpilot.selfdrive.ui.layouts.settings.toggles import TogglesLayout
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
@@ -39,6 +40,7 @@ class PanelType(IntEnum):
   FIREHOSE = 4
   DEVELOPER = 5
   DRAGONPILOT = 6
+  LINCOLN = 7
 
 
 @dataclass
@@ -65,6 +67,7 @@ class SettingsLayout(Widget):
       PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout()),
       PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayout()),
       PanelType.DRAGONPILOT: PanelInfo("dp", DragonpilotLayout()),
+      PanelType.LINCOLN: PanelInfo("Lincoln", LincolnLayout()),
     }
 
     self._font_medium = gui_app.font(FontWeight.MEDIUM)
@@ -118,7 +121,7 @@ class SettingsLayout(Widget):
     self._close_btn_rect = close_btn_rect
 
     # Navigation buttons
-    y = rect.y + 300
+    y = rect.y + 200
     for panel_type, panel_info in self._panels.items():
       button_rect = rl.Rectangle(rect.x + 50, y, rect.width - 150, NAV_BTN_HEIGHT)
 
@@ -148,19 +151,20 @@ class SettingsLayout(Widget):
     if panel.instance:
       panel.instance.render(content_rect)
 
-  def _handle_mouse_release(self, mouse_pos: MousePos) -> None:
+  def _handle_mouse_release(self, mouse_pos: MousePos) -> bool:
     # Check close button
     if rl.check_collision_point_rec(mouse_pos, self._close_btn_rect):
       if self._close_callback:
         self._close_callback()
-      return
+      return True
 
     # Check navigation buttons
     for panel_type, panel_info in self._panels.items():
       if rl.check_collision_point_rec(mouse_pos, panel_info.button_rect):
         self.set_current_panel(panel_type)
-        return
+      return True
 
+    return False
   def set_current_panel(self, panel_type: PanelType):
     if panel_type != self._current_panel:
       self._panels[self._current_panel].instance.hide_event()
