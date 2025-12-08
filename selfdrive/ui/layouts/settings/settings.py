@@ -65,6 +65,7 @@ class SettingsLayout(Widget):
       PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout()),
       PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayout()),
       PanelType.DRAGONPILOT: PanelInfo("dp", DragonpilotLayout()),
+      PanelType.LINCOLN: PanelInfo("Lincoln", LincolnLayout()),
     }
 
     self._font_medium = gui_app.font(FontWeight.MEDIUM)
