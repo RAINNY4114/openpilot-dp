@@ -20,6 +20,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
+from dragonpilot.selfdrive.controls.lib.human_turn_detection import HumanTurnDetection, HTDState
 
 State = log.SelfdriveState.OpenpilotState
 LaneChangeState = log.LaneChangeState
@@ -62,6 +63,8 @@ class Controls:
     # dp - ALKA: cache enabled state (CP doesn't change after init)
     self.alka_enabled = bool(self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.ALKA)
     self.alka_active = False
+    self.htd = HumanTurnDetection()
+    self.htd_state = HTDState.INACTIVE
 
   def update(self):
     self.sm.update(15)
@@ -104,9 +107,17 @@ class Controls:
       lkas_on = self.sm['carStateExt'].lkasOn
       # Conditions: lkas_on, gear not in P/N/R, calibration complete, seatbelt latched, doors closed
       calibrated = self.sm['liveCalibration'].calStatus == log.LiveCalibrationData.Status.calibrated
-      gear_ok = CS.gearShifter not in (car.CarState.GearShifter.park, car.CarState.GearShifter.neutral, car.CarState.GearShifter.reverse)
+      gear_ok = CS.gearShifter not in (car.CarState.GearShifter.park,
+                                       car.CarState.GearShifter.neutral,
+                                       car.CarState.GearShifter.reverse)
       self.alka_active = lkas_on and gear_ok and calibrated and not CS.seatbeltUnlatched and not CS.doorOpen
-    CC.latActive = (self.sm['selfdriveState'].active or self.alka_active) and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
+    else:
+      self.alka_active = False
+
+    lat_active = self.sm['selfdriveState'].active or self.alka_active
+    htd_allowed, self.htd_state = self.htd.update(lat_active, CS.steeringAngleDeg, CS.steeringTorque, CS.vEgo)
+    lat_active = lat_active and htd_allowed
+    CC.latActive = lat_active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
                    (not standstill or self.CP.steerAtStandstill)
     CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and self.CP.openpilotLongitudinalControl
 
