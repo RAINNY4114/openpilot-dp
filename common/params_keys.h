@@ -148,7 +148,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"dp_lon_aem", {PERSISTENT, BOOL, "0"}},
     {"dp_lincoln_curve_speed", {PERSISTENT, BOOL, "0"}},
     {"dp_lincoln_curve_log", {PERSISTENT, BOOL, "0"}},
-    {"dp_lincoln_curve_window_m", {PERSISTENT, INT, "100"}},
+    {"dp_lincoln_curve_window_m", {PERSISTENT, INT, "130"}},
     {"dp_lincoln_curve_k_enter", {PERSISTENT, INT, "4"}},
     {"dp_lincoln_curve_alat", {PERSISTENT, INT, "120"}},
     {"dp_lincoln_curve_decel", {PERSISTENT, INT, "-320"}},
