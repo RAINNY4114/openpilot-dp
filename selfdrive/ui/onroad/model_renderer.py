@@ -69,6 +69,7 @@ class LeadVehicle:
   x: float = 0.0
   y: float = 0.0
   sz: float = 0.0
+  v_lead: float = 0.0
 
 @dataclass
 class DpUiLeadMode:
@@ -208,13 +209,14 @@ class ModelRenderer(Widget):
     for i, lead_data in enumerate(leads):
       if lead_data and lead_data.status:
         d_rel, y_rel, v_rel = lead_data.dRel, lead_data.yRel, lead_data.vRel
+        v_lead = float(getattr(lead_data, "vLead", 0.0))
         idx = self._get_path_length_idx(path_x_array, d_rel)
 
         # Get z-coordinate from path at the lead vehicle position
         z = self._path.raw_points[idx, 2] if idx < len(self._path.raw_points) else 0.0
         point = self._map_to_screen(d_rel, -y_rel, z + self._path_offset_z)
         if point:
-          self._lead_vehicles[i] = self._update_lead_vehicle(d_rel, v_rel, point, self._rect)
+          self._lead_vehicles[i] = self._update_lead_vehicle(d_rel, v_rel, v_lead, point, self._rect)
 
   def _update_lead_box(self, radar_lead_one, model, v_ego: float, path_x_array):
     if not ui_state.dp_lincoln_hud_enhanced:
@@ -421,7 +423,7 @@ class ModelRenderer(Widget):
       stops=gradient_stops,
     )
 
-  def _update_lead_vehicle(self, d_rel, v_rel, point, rect):
+  def _update_lead_vehicle(self, d_rel, v_rel, v_lead, point, rect):
     speed_buff, lead_buff = 10.0, 40.0
 
     # Calculate fill alpha
@@ -443,7 +445,7 @@ class ModelRenderer(Widget):
     glow = [(x + (sz * 1.35) + g_xo, y + sz + g_yo), (x, y - g_yo), (x - (sz * 1.35) - g_xo, y + sz + g_yo)]
     chevron = [(x + (sz * 1.25), y + sz), (x, y), (x - (sz * 1.25), y + sz)]
 
-    return LeadVehicle(glow=glow, chevron=chevron, fill_alpha=int(fill_alpha), d_rel=d_rel, x=x, y=y, sz=sz, v_rel=v_rel)
+    return LeadVehicle(glow=glow, chevron=chevron, fill_alpha=int(fill_alpha), d_rel=d_rel, x=x, y=y, sz=sz, v_lead=v_lead)
 
   def _draw_lane_lines(self):
     """Draw lane lines and road edges"""
