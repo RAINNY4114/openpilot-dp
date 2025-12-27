@@ -108,6 +108,12 @@ SETTINGS = [
         "title": lambda: tr("Road Edge Detection (RED)"),
         "description": lambda: tr("Block lane change assist when the system detects the road edge.<br>NOTE: This will show 'Car Detected in Blindspot' warning."),
       },
+      {
+        "key": "dp_lat_cone_detection",
+        "type": "toggle_item",
+        "title": lambda: tr("Cone Detection (Experimental)"),
+        "description": lambda: tr("Detect traffic cones ahead and publish results for UI/debug and future features."),
+      },
 
     ],
   },
