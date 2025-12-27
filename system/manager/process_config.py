@@ -2,10 +2,11 @@ import os
 import operator
 import platform
 
-from cereal import car
+from cereal import car, custom
 from openpilot.common.params import Params
 from openpilot.system.hardware import PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
+from openpilot.selfdrive.modeld.model_manager_helpers import get_active_model_runner
 
 WEBCAM = os.getenv("USE_WEBCAM") is not None
 LITE = os.getenv("LITE") is not None
@@ -60,24 +61,34 @@ def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
 def dashy(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return params.get_bool("dp_dev_dashy")
+  return int(params.get("dp_dev_dashy") or 0) > 0
+
+def dashy_with_video(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return int(params.get("dp_dev_dashy") or 0) == 2
 
 def comma_connect(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not params.get_bool("dp_dev_disable_connect")
 
+def coned(started: bool, params: Params, CP: car.CarParams) -> bool:
+  # Run onroad when cone detection is enabled so HUD object markers and lane-occupancy cues have data.
+  if not started:
+    return False
+  return bool(params.get_bool("dp_lat_cone_detection") or
+              params.get_bool("dp_lincoln_auto_avoid") or
+              params.get_bool("dp_lincoln_auto_overtake"))
+
 def mapd(started: bool, params: Params, CP: car.CarParams) -> bool:
-  # Run mapd when:
-  # - user requested an offline maps download, or
-  # - onroad realtime cruise mode is enabled, or
-  # - Lincoln performance overlay is enabled (HUD needs RoadName)
-  try:
-    params_memory = Params("/dev/shm/params")
-    if params_memory.get("OSMDownloadLocations"):
-      return True
-  except Exception:
-    pass
-  return started and (params.get_bool("dp_lincoln_osm_realtime_cruise") or
-                      params.get_bool("dp_lincoln_perf_info_enabled"))
+  # Align with FrogPilot behavior: mapd stays running so map data is always ready.
+  return True
+
+def is_snpe_model(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return bool(get_active_model_runner(params, not started) == custom.ModelManagerSP.Runner.snpe)
+
+def is_tinygrad_model(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return bool(get_active_model_runner(params, not started) == custom.ModelManagerSP.Runner.tinygrad)
+
+def is_stock_model(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return bool(get_active_model_runner(params, not started) == custom.ModelManagerSP.Runner.stock)
 
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
@@ -90,7 +101,7 @@ procs = [
 
   NativeProcess("loggerd", "system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "system/loggerd", ["./encoderd"], only_onroad),
-  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(dashy, only_onroad))),
+  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(dashy_with_video, only_onroad))),
   PythonProcess("logmessaged", "system.logmessaged", always_run),
 
   NativeProcess("camerad", "system/camerad", ["./camerad"], driverview, enabled=not WEBCAM),
@@ -100,11 +111,14 @@ procs = [
   PythonProcess("micd", "system.micd", iscar, enabled=not LITE),
   PythonProcess("timed", "system.timed", always_run, enabled=not PC),
 
-  PythonProcess("modeld", "selfdrive.modeld.modeld", only_onroad),
-  PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", driverview, enabled=(WEBCAM or not PC)),
+  PythonProcess("models_manager", "selfdrive.modeld.model_manager", only_offroad),
+  PythonProcess("modeld", "selfdrive.modeld.modeld", and_(only_onroad, or_(is_stock_model, is_tinygrad_model))),
+  PythonProcess("modeld_snpe", "selfdrive.modeld.modeld_snpe", and_(only_onroad, is_snpe_model)),
+  PythonProcess("coned", "selfdrive.modeld.coned", coned),
+  PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", driverview, enabled=(WEBCAM or not PC) and not LITE),
 
   PythonProcess("sensord", "system.sensord.sensord", only_onroad, enabled=not PC),
-  PythonProcess("ui", "selfdrive.ui.ui", always_run, restart_if_crash=True),
+  PythonProcess("ui", "selfdrive.ui.ui", always_run),
   PythonProcess("soundd", "selfdrive.ui.soundd", driverview, enabled=not LITE),
   PythonProcess("beepd", "dragonpilot.selfdrive.ui.beepd", beep, enabled=TICI and LITE),
   PythonProcess("locationd", "selfdrive.locationd.locationd", only_onroad),
@@ -118,7 +132,8 @@ procs = [
   PythonProcess("maps_updater", "selfdrive.mapd.maps_updater", always_run, enabled=not PC),
   PythonProcess("mapd", "selfdrive.mapd.mapd", mapd, enabled=not PC),
   PythonProcess("deleter", "system.loggerd.deleter", always_run),
-  PythonProcess("dmonitoringd", "selfdrive.monitoring.dmonitoringd", driverview, enabled=(WEBCAM or not PC)),
+  PythonProcess("dmonitoringd", "selfdrive.monitoring.dmonitoringd", driverview, enabled=(WEBCAM or not PC) and not LITE),
+  PythonProcess("dpmonitoringd", "selfdrive.monitoring.dpmonitoringd", only_onroad, enabled=LITE),
   PythonProcess("qcomgpsd", "system.qcomgpsd.qcomgpsd", qcomgps, enabled=TICI),
   PythonProcess("pandad", "selfdrive.pandad.pandad", always_run),
   PythonProcess("paramsd", "selfdrive.locationd.paramsd", only_onroad),
@@ -133,14 +148,14 @@ procs = [
   PythonProcess("updated", "system.updated.updated", only_offroad, enabled=not PC),
   PythonProcess("uploader", "system.loggerd.uploader", comma_connect and always_run),
   PythonProcess("statsd", "system.statsd", always_run),
-  PythonProcess("feedbackd", "selfdrive.ui.feedback.feedbackd", only_onroad),
+  PythonProcess("feedbackd", "selfdrive.ui.feedback.feedbackd", only_onroad, enabled=not LITE),
 
   # debug procs
-  NativeProcess("bridge", "cereal/messaging", ["./bridge"], or_(notcar, and_(dashy, only_onroad))),
-  PythonProcess("webrtcd", "system.webrtc.webrtcd", or_(notcar, and_(dashy, only_onroad))),
+  NativeProcess("bridge", "cereal/messaging", ["./bridge"], or_(notcar, and_(dashy_with_video, only_onroad))),
+  PythonProcess("webrtcd", "system.webrtc.webrtcd", or_(notcar, and_(dashy_with_video, only_onroad))),
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
   PythonProcess("joystick", "tools.joystick.joystick_control", and_(joystick, iscar)),
-  PythonProcess("dashy", "dragonpilot.dashy.backend.server", always_run),
+  PythonProcess("dashy", "dragonpilot.dashy.backend.server", dashy),
 ]
 
 managed_processes = {p.name: p for p in procs}

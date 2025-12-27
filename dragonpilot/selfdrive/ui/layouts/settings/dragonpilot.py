@@ -1,199 +1,286 @@
 import os
-
 from openpilot.system.ui.widgets import Widget, DialogResult
+from openpilot.common.params import Params, UnknownKeyName
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.widgets.scroller_tici import Scroller
-from dragonpilot.system.ui.lib.multilang import tr
-from openpilot.system.ui.widgets.list_view import toggle_item, simple_item, button_item, spin_button_item, double_spin_button_item, text_spin_button_item
+from openpilot.system.ui.lib.multilang import tr
+from openpilot.system.ui.widgets.list_view import multiple_button_item, toggle_item, simple_item, button_item, spin_button_item, double_spin_button_item, text_spin_button_item
 from openpilot.system.ui.lib.application import gui_app
-from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog
-from openpilot.system.hardware import HARDWARE
-from dragonpilot.settings import SETTINGS
+from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 
 LITE = os.getenv("LITE") is not None
-MICI = HARDWARE.get_device_type() == "mici"
 
 class DragonpilotLayout(Widget):
   def __init__(self):
     super().__init__()
-
+    self._params = Params()
     self._scroller: Scroller | None = None
-    self._brand = ""
+    self._has_long_ctrl = False
+    self._has_radar_unavailable = False
 
     self._toggles = {}
-    self._toggle_metadata = {}
-    self._item_factories = {
-      "toggle_item": toggle_item,
-      "spin_button_item": spin_button_item,
-      "double_spin_button_item": double_spin_button_item,
-      "text_spin_button_item": text_spin_button_item,
-    }
 
-    self._openpilot_longitudinal_control = False
     if ui_state.CP is not None:
-      self._brand = ui_state.CP.brand
-      self._openpilot_longitudinal_control = ui_state.CP.openpilotLongitudinalControl
+      self._has_long_ctrl = ui_state.CP.openpilotLongitudinalControl
+      self._has_radar_unavailable = ui_state.CP.radarUnavailable
+      match ui_state.CP.brand:
+        case "toyota":
+          self._toyota_toggles()
+        case "volkswagen":
+          self._vag_toggles()
+        case "mazda":
+          self._mazda_toggles()
 
-    self._load_settings()
+    self._lat_toggles()
+    self._lon_toggles()
+    self._ui_toggles()
+    self._device_toggles()
 
     self._reset_dp_conf_btn = button_item(
       lambda: tr("Reset DP Settings"),
       lambda: tr("RESET"),
       lambda: tr("Reset dragonpilot settings to default and restart the device."),
       callback=self._reset_dp_conf)
+
     self._toggles['btn_reset_dp_conf'] = self._reset_dp_conf_btn
 
     self._scroller = Scroller(list(self._toggles.values()), line_separator=True, spacing=0)
 
-  def _load_settings(self):
-    settings_data = SETTINGS
+  def _toyota_toggles(self):
+    self._toggles["title_toyota"] = simple_item(title=lambda: tr("### Toyota / Lexus ###"))
 
-    for i, section in enumerate(settings_data):
-      if self._check_condition(section.get("condition")):
-        formatted_title = f"### {section['title']} ###"
-        self._toggles[f"title_{i}"] = simple_item(title=formatted_title)
-        for setting in section.get("settings", []):
-          if self._check_condition(setting.get("condition")) and self._check_brands(setting.get("brands")):
-            self._create_item(setting)
+    self._toggles["dp_toyota_door_auto_lock_unlock"] = toggle_item(
+      title=lambda: tr("Door Auto Lock/Unlock"),
+      description=lambda: tr("Enable openpilot to auto-lock doors above 20 km/h and auto-unlock when shifting to Park."),
+      initial_state=self._params.get_bool("dp_toyota_door_auto_lock_unlock"),
+      callback=lambda val: self._params.put_bool("dp_toyota_door_auto_lock_unlock", val),
+    )
 
-  def _check_condition(self, condition):
-    if not condition:
-      return True
+    self._toggles["dp_toyota_tss1_sng"] = toggle_item(
+      title=lambda: tr("Enable TSS1 SnG Mod"),
+      description=lambda: "",
+      initial_state=self._params.get_bool("dp_toyota_tss1_sng"),
+      callback=lambda val: self._params.put_bool("dp_toyota_tss1_sng", val),
+    )
 
-    context = {"LITE": LITE, "MICI": MICI, "brand": self._brand, "openpilotLongitudinalControl": self._openpilot_longitudinal_control}
+    self._toggles["dp_toyota_stock_lon"] = toggle_item(
+      title=lambda: tr("Use Stock Longitudinal Control"),
+      description=lambda: "",
+      initial_state=self._params.get_bool("dp_toyota_stock_lon"),
+      callback=lambda val: self._params.put_bool("dp_toyota_stock_lon", val),
+    )
 
-    try:
-      return eval(condition, context)
-    except Exception:
-      return False
+  def _vag_toggles(self):
+    self._toggles["title_vag"] = simple_item(title=lambda: tr("### VAG ###"))
 
-  def _check_brands(self, brands):
-    """Check if current brand is in the allowed brands list."""
-    if not brands:
-      return True  # No brand restriction, show for all
-    return self._brand in brands
+    self._toggles["dp_vag_a0_sng"] = toggle_item(
+      title=lambda: tr("MQB A0 SnG Mod"),
+      description=lambda: "",
+      initial_state=self._params.get_bool("dp_vag_a0_sng"),
+      callback=lambda val: self._params.put_bool("dp_vag_a0_sng", val),
+    )
 
-  def _resolve(self, value):
-    """Resolve callable values (lambdas) to their actual values."""
-    return value() if callable(value) else value
+    self._toggles["dp_vag_pq_steering_patch"] = toggle_item(
+      title=lambda: tr("PQ Steering Patch"),
+      description=lambda: "",
+      initial_state=self._params.get_bool("dp_vag_pq_steering_patch"),
+      callback=lambda val: self._params.put_bool("dp_vag_pq_steering_patch", val),
+    )
 
-  def _create_item(self, setting):
-    key = setting["key"]
-    item_type = setting["type"]
-    factory = self._item_factories.get(item_type)
-    if not factory:
-      return
+    self._toggles["dp_vag_avoid_eps_lockout"] = toggle_item(
+      title=lambda: tr("Avoid EPS Lockout"),
+      description=lambda: "",
+      initial_state=self._params.get_bool("dp_vag_avoid_eps_lockout"),
+      callback=lambda val: self._params.put_bool("dp_vag_avoid_eps_lockout", val),
+    )
 
-    # title and description support callables natively in ListItem
-    args = {"title": setting["title"]}
-    if setting.get("description"):
-      args["description"] = setting["description"]
+  def _mazda_toggles(self):
+    self._toggles["title_mazda"] = simple_item(title=lambda: tr("### Mazda ###"))
 
-    param_name = setting.get("param_name") or key
+  def _lat_toggles(self):
+    self._toggles["title_lat"] = simple_item(title=lambda: tr("### Lateral ###"))
 
-    # Handle initial values
-    if item_type == "toggle_item":
-      args["initial_state"] = ui_state.params.get_bool(param_name)
-    else:
-      raw_val = ui_state.params.get(param_name)
-      initial_val = raw_val.decode() if isinstance(raw_val, bytes) else raw_val
-      if initial_val is None:
-        initial_val = setting.get("default")
+    self._toggles["dp_lat_alka"] = toggle_item(
+      title=lambda: tr("Always-on Lane Keeping Assist (ALKA)"),
+      description=lambda: tr("Allows openpilot to always steer to keep the car in its lane."),
+      initial_state=self._params.get_bool("dp_lat_alka"),
+      callback=lambda val: self._params.put_bool("dp_lat_alka", val),
+    )
 
-      if item_type == "double_spin_button_item":
-        args["initial_value"] = float(initial_val)
-      elif item_type == "text_spin_button_item":
-        args["initial_index"] = int(initial_val)
-      else: # spin_button_item
-        args["initial_value"] = int(initial_val)
+    self._toggles['dp_lat_lca_speed'] = spin_button_item(
+      title=lambda: tr('Lane Change Assist At:'),
+      description=lambda: tr("Off = Disable LCA.<br>1 mph = 1.2 km/h."),
+      initial_value=int(self._params.get("dp_lat_lca_speed") or 20),
+      callback=self._on_dp_lat_lca_speed_change,
+      min_val=0,
+      max_val=100,
+      step=5,
+      suffix=tr(" mph"),
+      special_value_text=tr("Off"),
+    )
 
-    # Handle initial enabled state
-    if "initially_enabled_by" in setting:
-      enabled_by = setting["initially_enabled_by"]
-      source_param = enabled_by["param"]
-      source_val_raw = ui_state.params.get(source_param)
-      source_val = source_val_raw.decode() if isinstance(source_val_raw, bytes) else source_val_raw
-      if source_val is None:
-        source_val = enabled_by.get("default")
+    self._toggles['dp_lat_lca_auto_sec'] = double_spin_button_item(
+      title=lambda: "+ " + tr('Auto Lane Change after:'),
+      description=lambda: tr("Off = Disable Auto Lane Change."),
+      initial_value=int(self._params.get("dp_lat_lca_auto_sec") or 0.0),
+      callback=lambda val: self._params.put("dp_lat_lca_auto_sec", float(val)),
+      min_val=0.0,
+      max_val=5.0,
+      step=0.5,
+      suffix=tr(" sec"),
+      special_value_text=tr("Off"),
+      # enabled=int(self._params.get("dp_lat_lca_speed") or 20) > 0
+    )
 
-      if source_val is not None:
-        condition_str = enabled_by["condition"]
-        try:
-          is_enabled = eval(condition_str, {"value": int(source_val)})
-          args["enabled"] = is_enabled
-        except Exception:
-          args["enabled"] = True
-      else:
-        args["enabled"] = True
+    self._toggles['dp_lat_road_edge_detection'] = toggle_item(
+      title=lambda: tr('Road Edge Detection (RED)'),
+      description=lambda: tr("Block lane change assist when the system detects the road edge.<br>NOTE: This will show 'Car Detected in Blindspot' warning."),
+      initial_state=self._params.get_bool("dp_lat_road_edge_detection"),
+      callback=lambda val: self._params.put_bool("dp_lat_road_edge_detection", val),
+    )
 
-    # Handle callback creation
-    primary_action = None
-    if param_name:
-      if item_type == "toggle_item":
-        primary_action = lambda val, p=param_name: ui_state.params.put_bool(p, bool(val))
-      elif item_type == "double_spin_button_item":
-        primary_action = lambda val, p=param_name: ui_state.params.put(p, float(val))
-      else: # spin_button_item, text_spin_button_item
-        primary_action = lambda val, p=param_name: ui_state.params.put(p, int(val))
+  def _lon_toggles(self):
+    self._toggles["title_lon"] = simple_item(title=lambda: tr("### Longitudinal ###"))
 
-    side_effects = []
-    if "on_change" in setting:
-      for effect in setting["on_change"]:
-        target_key = effect.get("target")
-        action = effect.get("action")
-        condition_str = effect.get("condition")
+    self._toggles['dp_lon_ext_radar'] = toggle_item(
+      title=lambda: tr("Use External Radar"),
+      description=lambda: tr("See https://github.com/eFiniLan/openpilot-ext-radar-addon for more information."),
+      initial_state=self._params.get_bool("dp_lon_ext_radar"),
+      callback=lambda val: self._params.put_bool("dp_lon_ext_radar", val),
+    )
 
-        if target_key and action == "set_enabled" and condition_str:
-          def create_side_effect(tk=target_key, cs=condition_str):
-            def side_effect_action(val):
-              if tk in self._toggles:
-                try:
-                  is_enabled = eval(cs, {"value": val})
-                  self._toggles[tk].action_item.set_enabled(is_enabled)
-                except Exception:
-                  pass
-            return side_effect_action
-          side_effects.append(create_side_effect())
+    self._toggles["dp_lon_acm"] = toggle_item(
+      title=lambda: tr("Enable Adaptive Coasting Mode (ACM)"),
+      description=tr("Adaptive Coasting Mode (ACM) reduces braking to allow smoother coasting when appropriate."),
+      initial_state=self._params.get_bool("dp_lon_acm"),
+      callback=lambda val: self._params.put_bool("dp_lon_acm", val),
+    )
 
-    def combined_callback(val):
-      if primary_action:
-        primary_action(val)
-      for effect in side_effects:
-        effect(val)
+    self._toggles["dp_lon_aem"] = toggle_item(
+      title=lambda: tr("Adaptive Experimental Mode (AEM)"),
+      description=lambda: tr("Adaptive mode switcher between ACC and Blended based on driving context."),
+      initial_state=self._params.get_bool("dp_lon_aem"),
+      callback=lambda val: self._params.put_bool("dp_lon_aem", val),
+    )
 
-    if "callback" in setting and setting["callback"]:
-      args["callback"] = getattr(self, setting["callback"])
-    else:
-      args["callback"] = combined_callback
+  def _ui_toggles(self):
+    self._toggles["title_ui"] = simple_item(title=lambda: tr("### UI ###"))
 
-    # D. Add other properties from JSON
-    for prop in ["min_val", "max_val", "step"]:
-      if prop in setting:
-        args[prop] = setting[prop]
-    # These properties don't support callables in the widgets, so resolve them
-    if "special_value_text" in setting:
-      args["special_value_text"] = self._resolve(setting["special_value_text"])
-    if "suffix" in setting:
-      args["suffix"] = self._resolve(setting["suffix"])
-    if "options" in setting:
-      args["options"] = [self._resolve(opt) for opt in setting["options"]]
+    self._toggles["dp_ui_hide_hud_speed_kph"] = spin_button_item(
+      title=lambda: tr("Hide HUD When Moves above:"),
+      description=lambda: tr("To prevent screen burn-in, hide Speed, MAX Speed, and Steering/DM Icons when the car moves.<br>Off = Stock Behavior<br>1 km/h = 0.6 mph"),
+      initial_value=int(self._params.get("dp_ui_hide_hud_speed_kph") or 0),
+      callback=lambda val: self._params.put("dp_ui_hide_hud_speed_kph", val),
+      suffix=tr(" km/h"),
+      min_val=0,
+      max_val=120,
+      step=5,
+      special_value_text=tr("Off"),
+    )
 
-    widget = factory(**args)
-    self._toggles[key] = widget
-    if param_name:
-      self._toggle_metadata[key] = {
-        "widget": widget,
-        "param_name": param_name,
-        "item_type": item_type,
-        "default": setting.get("default")
-      }
+    self._toggles["dp_ui_rainbow"] = toggle_item(
+      title=lambda: tr("Rainbow Driving Path like Tesla"),
+      description=lambda: tr("Why not?"),
+      initial_state=self._params.get_bool("dp_ui_rainbow"),
+      callback=lambda val: self._params.put_bool("dp_ui_rainbow", val),
+    )
+
+    self._toggles["dp_ui_lead"] = text_spin_button_item(
+      title=lambda: tr("Display Lead Stats"),
+      description=lambda: tr("Display the statistics of lead car and/or radar tracking points.<br>Lead: Lead stats only<br>Radar: Radar tracking point stats only<br>All: Lead and Radar stats<br>NOTE: Radar option only works on certain vehicle models."),
+      initial_index=int(self._params.get("dp_ui_lead") or 0),
+      callback=lambda val: self._params.put("dp_ui_lead", val),
+      options=["Off", "Lead", "Radar", "All"]
+    )
+
+  def _device_toggles(self):
+    self._toggles["title_dev"] = simple_item(title=lambda: tr("### Device ###"))
+
+    if LITE:
+      self._toggles["dp_dev_is_rhd"] = toggle_item(
+        title=lambda: tr("Enable Right-Hand Drive Mode"),
+        description=lambda: tr("Allow openpilot to obey right-hand traffic conventions on right driver seat."),
+        initial_state=self._params.get_bool("dp_dev_is_rhd"),
+        callback=lambda val: self._params.put_bool("dp_dev_is_rhd", val),
+      )
+
+      self._toggles["dp_dev_monitoring_disabled"] = toggle_item(
+        title=lambda: tr("Disable Driver Monitoring"),
+        description=lambda: tr("USE AT YOUR OWN RISK."),
+        initial_state=self._params.get_bool("dp_dev_monitoring_disabled"),
+        callback=lambda val: self._params.put_bool("dp_dev_monitoring_disabled", val),
+      )
+
+      self._toggles["dp_dev_beep"] = toggle_item(
+        title=lambda: tr("Enable Beep (Warning)"),
+        description=lambda: tr("Use Buzzer for audiable alerts."),
+        initial_state=self._params.get_bool("dp_dev_beep"),
+        callback=lambda val: self._params.put_bool("dp_dev_beep", val),
+      )
+
+    self._toggles["dp_ui_display_mode"] = text_spin_button_item(
+      title=lambda: tr("Display Mode"),
+      callback=lambda val: self._params.put("dp_ui_display_mode", val),
+      options=["Std.", "MAIN+", "OP+", "MAIN-", "OP-"],
+      initial_index=int(self._params.get("dp_ui_display_mode") or 0),
+      description=lambda: tr("Std.: Stock behavior.<br>MAIN+: ACC MAIN on = Display ON.<br>OP+: OP enabled = Display ON.<br>MAIN-: ACC MAIN on = Display OFF<br>OP-: OP enabled = Display OFF."),
+    )
+
+    if "LITE" not in os.environ:
+      self._toggles["dp_dev_audible_alert_mode"] = text_spin_button_item(
+        title=lambda: tr("Audible Alert"),
+        description=lambda: tr("Std.: Stock behaviour.<br>Warning: Only emits sound when there is a warning.<br>Off: Does not emit any sound at all."),
+        initial_index=int(self._params.get("dp_dev_audible_alert_mode") or 0),
+        callback=lambda val: self._params.put("dp_dev_audible_alert_mode", val),
+        options=["Std.", "Warning", "Off"],
+      )
+
+    self._toggles["dp_dev_auto_shutdown_in"] = spin_button_item(
+      title=lambda: tr("Auto Shutdown After"),
+      description=lambda: tr("0 mins = Immediately"),
+      initial_value=int(self._params.get("dp_dev_auto_shutdown_in") or -5),
+      callback=lambda val: self._params.put("dp_dev_auto_shutdown_in", val),
+      min_val=-5,
+      max_val=300,
+      step=5,
+      suffix=tr(" mins"),
+      special_value_text=tr("Off"),
+    )
+
+    self._toggles["dp_dev_dashy"] = text_spin_button_item(
+      title=lambda: tr("dashy"),
+      description=lambda: tr("dashy - dragonpilot's all-in-one system hub for you.<br><br>Visit http://<device_ip>:5088 to access.<br><br>Off - Turn off dashy completely.<br>File: File Manager only.<br>All: File Manager + Live Stream."),
+      initial_index=int(self._params.get("dp_dev_dashy") or 0),
+      callback=lambda val: self._params.put("dp_dev_dashy", val),
+      options=[tr("Off"), tr("File"), tr("All")],
+    )
+
+    self._toggles["dp_dev_delay_loggerd"] = spin_button_item(
+      title=lambda: tr("Delay Starting Loggerd for:"),
+      description=lambda: tr("Delays the startup of loggerd and its related processes when the device goes on-road.<br>This prevents the initial moments of a drive from being recorded, protecting location privacy at the start of a trip."),
+      initial_value=int(self._params.get("dp_dev_delay_loggerd") or 0),
+      callback=lambda val: self._params.put("dp_dev_delay_loggerd", val),
+      min_val=0,
+      max_val=300,
+      step=5,
+      suffix=tr(" secs"),
+      special_value_text=tr("Off"),
+    )
+
+    self._toggles["dp_dev_disable_connect"] = toggle_item(
+      title=lambda: tr("Disable Comma Connect"),
+      description=lambda: tr("Disable Comma connect service if you do not wish to upload / being tracked by the service."),
+      initial_state=self._params.get_bool("dp_dev_disable_connect"),
+      callback=lambda val: self._params.put_bool("dp_dev_disable_connect", val),
+    )
 
   def _reset_dp_conf(self):
     def reset_dp_conf(result: int):
+      # Check engaged again in case it changed while the dialog was open
       if result != DialogResult.CONFIRM:
         return
-      ui_state.params.put_bool("dp_dev_reset_conf", True)
-      ui_state.params.put_bool("DoReboot", True)
+      self._params.put_bool("dp_dev_reset_conf", True)
+      self._params.put_bool("DoReboot", True)
 
     dialog = ConfirmDialog(tr("Are you sure you want to reset ALL DP SETTINGS to default?"), tr("Reset"))
     gui_app.set_modal_overlay(dialog, callback=reset_dp_conf)
@@ -205,37 +292,9 @@ class DragonpilotLayout(Widget):
   def _update_toggles(self):
     ui_state.update_params()
 
-    # Refresh toggles from params to mirror external changes
-    for _, meta in self._toggle_metadata.items():
-      widget = meta["widget"]
-      param_name = meta["param_name"]
-      item_type = meta["item_type"]
-      default = meta.get("default")
-
-      if item_type == "toggle_item":
-        widget.action_item.set_state(ui_state.params.get_bool(param_name))
-      else:  # Spinners
-        raw_val = ui_state.params.get(param_name)
-        val_str = None
-        if raw_val is not None:
-          if isinstance(raw_val, bytes):
-            val_str = raw_val.decode()
-          else:
-            val_str = str(raw_val)
-        elif default is not None:
-          val_str = str(default)
-
-        if val_str is None:
-          continue
-
-        if item_type == "double_spin_button_item":
-          widget.action_item.set_value(float(val_str))
-        elif item_type == "spin_button_item":
-          widget.action_item.set_value(int(val_str))
-        elif item_type == "text_spin_button_item":
-          widget.action_item.set_index(int(val_str))
-        else:  # spin_button_item and text_spin_button_item
-          pass
-
   def _render(self, rect):
     self._scroller.render(rect)
+
+  def _on_dp_lat_lca_speed_change(self, val):
+    self._params.put("dp_lat_lca_speed", int(val))
+    self._toggles['dp_lat_lca_auto_sec'].action_item.set_enabled(val > 0)
