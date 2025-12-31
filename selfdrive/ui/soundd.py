@@ -28,7 +28,7 @@ AMBIENT_DB = 30 # DB where MIN_VOLUME is applied
 DB_SCALE = 30 # AMBIENT_DB + DB_SCALE is where MAX_VOLUME is applied
 
 VOLUME_BASE = 20
-if HARDWARE.get_device_type() in ("tizi", "tici"):
+if HARDWARE.get_device_type() == "tizi":
   VOLUME_BASE = 10
 
 AUTO_AVOID_CHIME_MIN_INTERVAL_S = 2.0
@@ -44,8 +44,8 @@ LaneChangeDirection = log.LaneChangeDirection
 
 sound_list: dict[int, tuple[str, int | None, float]] = {
   # AudibleAlert, file name, play count (none for infinite)
-  AudibleAlert.engage: ("engage.wav", 1, MAX_VOLUME),
-  AudibleAlert.disengage: ("disengage.wav", 1, MAX_VOLUME),
+  AudibleAlert.engage: ("Autopilot Engage.wav", 1, MAX_VOLUME),
+  AudibleAlert.disengage: ("Autopilot Disengage.wav", 1, MAX_VOLUME),
   AudibleAlert.refuse: ("refuse.wav", 1, MAX_VOLUME),
 
   AudibleAlert.prompt: ("prompt.wav", 1, MAX_VOLUME),
@@ -55,11 +55,6 @@ sound_list: dict[int, tuple[str, int | None, float]] = {
   AudibleAlert.warningSoft: ("warning_soft.wav", None, MAX_VOLUME),
   AudibleAlert.warningImmediate: ("warning_immediate.wav", None, MAX_VOLUME),
 }
-if HARDWARE.get_device_type() in ("tizi", "tici"):
-  sound_list.update({
-    AudibleAlert.engage: ("engage_tizi.wav", 1, MAX_VOLUME),
-    AudibleAlert.disengage: ("disengage_tizi.wav", 1, MAX_VOLUME),
-  })
 
 def check_selfdrive_timeout_alert(sm):
   ss_missing = time.monotonic() - sm.recv_time['selfdriveState']
@@ -76,6 +71,7 @@ class Soundd:
     self._params = Params()
     self.load_sounds()
     self.load_dp_voice_sounds()
+    self.load_dp_maneuver_voice_sounds()
     self.load_dp_avoid_sounds()
 
     self.current_alert = AudibleAlert.none
@@ -107,6 +103,7 @@ class Soundd:
     self._dp_maneuver_voice_next_allowed = 0.0
     self._dp_maneuver_prev_lc_state = LaneChangeState.off
     self._dp_maneuver_prev_lc_dir = LaneChangeDirection.none
+    self._dp_maneuver_voice_issued = False
 
     # dp lincoln auto-avoid chime (plays alert_chime.wav once when avoidance triggers)
     self._dp_auto_avoid_enabled = self._params.get_bool("dp_lincoln_auto_avoid")
@@ -144,9 +141,9 @@ class Soundd:
     self.dp_voice_sounds: dict[str, np.ndarray] = {}
     base = os.path.join(BASEDIR, "selfdrive", "assets", "sounds")
     for side in ("left", "right"):
-      # Prefer directional voice prompts (e.g. "left-side.wav") when available,
-      # but fall back to the original filenames for backwards compatibility.
-      candidates = (f"{side}-side.wav", f"{side}.wav")
+      # Blindspot voice prompts: prefer the original filenames ("left.wav"/"right.wav").
+      # Fall back to "{side}-side.wav" only for backwards compatibility if needed.
+      candidates = (f"{side}.wav", f"{side}-side.wav")
       path = None
       for fname in candidates:
         p = os.path.join(base, fname)
@@ -168,6 +165,35 @@ class Soundd:
         cloudlog.warning(f"Missing blindspot voice file: {path}")
       except Exception:
         cloudlog.exception(f"Failed loading blindspot voice file: {path}")
+
+  def load_dp_maneuver_voice_sounds(self) -> None:
+    # Automatic lane-change maneuver voice prompts (avoidance/overtake):
+    # prefer "{side}-side.wav", fall back to "{side}.wav".
+    self.dp_maneuver_voice_sounds: dict[str, np.ndarray] = {}
+    base = os.path.join(BASEDIR, "selfdrive", "assets", "sounds")
+    for side in ("left", "right"):
+      candidates = (f"{side}-side.wav", f"{side}.wav")
+      path = None
+      for fname in candidates:
+        p = os.path.join(base, fname)
+        if os.path.exists(p):
+          path = p
+          break
+      if path is None:
+        cloudlog.warning(f"Missing maneuver voice file(s): {', '.join(candidates)}")
+        continue
+      try:
+        with wave.open(path, 'r') as wavefile:
+          assert wavefile.getnchannels() == 1
+          assert wavefile.getsampwidth() == 2
+          assert wavefile.getframerate() == SAMPLE_RATE
+          length = wavefile.getnframes()
+          data = np.frombuffer(wavefile.readframes(length), dtype=np.int16).astype(np.float32) / (2**16/2)
+          self.dp_maneuver_voice_sounds[side] = data
+      except FileNotFoundError:
+        cloudlog.warning(f"Missing maneuver voice file: {path}")
+      except Exception:
+        cloudlog.exception(f"Failed loading maneuver voice file: {path}")
 
   def load_dp_avoid_sounds(self):
     self._dp_avoid_chime_sound: np.ndarray | None = None
@@ -340,18 +366,19 @@ class Soundd:
     self.dp_voice_playing = True
     self.dp_voice_next_allowed = now + self.dp_voice_interval
 
-  def _maybe_start_dp_maneuver_voice(self, side: str, now: float) -> None:
+  def _maybe_start_dp_maneuver_voice(self, side: str, now: float) -> bool:
     if now < self._dp_maneuver_voice_next_allowed:
-      return
+      return False
     if self.current_alert != AudibleAlert.none or self.dp_voice_playing or self._dp_maneuver_voice_playing:
-      return
-    sound = self.dp_voice_sounds.get(side)
+      return False
+    sound = self.dp_maneuver_voice_sounds.get(side)
     if sound is None or sound.size == 0:
-      return
+      return False
     self._dp_maneuver_voice_sound = sound
     self._dp_maneuver_voice_frame = 0
     self._dp_maneuver_voice_playing = True
     self._dp_maneuver_voice_next_allowed = now + MANEUVER_VOICE_MIN_INTERVAL_S
+    return True
 
   def _maybe_start_dp_auto_avoid_chime(self, now: float) -> None:
     if not self._dp_auto_avoid_enabled:
@@ -398,6 +425,7 @@ class Soundd:
     if not (self._dp_auto_avoid_enabled or self._dp_auto_overtake_enabled):
       self._dp_maneuver_prev_lc_state = LaneChangeState.off
       self._dp_maneuver_prev_lc_dir = LaneChangeDirection.none
+      self._dp_maneuver_voice_issued = False
       return
 
     if not sm.valid.get("modelV2", False):
@@ -406,17 +434,38 @@ class Soundd:
     if not getattr(sm["selfdriveState"], "enabled", False):
       self._dp_maneuver_prev_lc_state = LaneChangeState.off
       self._dp_maneuver_prev_lc_dir = LaneChangeDirection.none
+      self._dp_maneuver_voice_issued = False
       return
 
     meta = sm["modelV2"].meta
     lc_state = getattr(meta, "laneChangeState", LaneChangeState.off)
     lc_dir = getattr(meta, "laneChangeDirection", LaneChangeDirection.none)
 
-    started = (self._dp_maneuver_prev_lc_state != LaneChangeState.laneChangeStarting and
-               lc_state == LaneChangeState.laneChangeStarting)
-    if started and lc_dir in (LaneChangeDirection.left, LaneChangeDirection.right):
-      side = "left" if lc_dir == LaneChangeDirection.left else "right"
-      self._maybe_start_dp_maneuver_voice(side, now)
+    if lc_state == LaneChangeState.off:
+      self._dp_maneuver_voice_issued = False
+
+    # Prefer starting the maneuver voice at the *intent* stage for auto lane changes
+    # (preLaneChange), so the prompt and blinker lead time happen before the car moves.
+    if not self._dp_maneuver_voice_issued and lc_dir in (LaneChangeDirection.left, LaneChangeDirection.right):
+      pre_started = (self._dp_maneuver_prev_lc_state == LaneChangeState.off and
+                     lc_state == LaneChangeState.preLaneChange)
+
+      manual_blinker = False
+      if pre_started and sm.alive.get("carState", False):
+        cs = sm["carState"]
+        manual_blinker = bool(cs.leftBlinker != cs.rightBlinker)
+
+      # Only play at preLaneChange if the driver didn't manually signal at the time of intent.
+      if pre_started and not manual_blinker:
+        side = "left" if lc_dir == LaneChangeDirection.left else "right"
+        self._dp_maneuver_voice_issued = self._maybe_start_dp_maneuver_voice(side, now)
+
+      # Fallback: play when the lane change actually starts (manual lane change, or if pre prompt was suppressed).
+      started = (self._dp_maneuver_prev_lc_state != LaneChangeState.laneChangeStarting and
+                 lc_state == LaneChangeState.laneChangeStarting)
+      if started and not self._dp_maneuver_voice_issued:
+        side = "left" if lc_dir == LaneChangeDirection.left else "right"
+        self._dp_maneuver_voice_issued = self._maybe_start_dp_maneuver_voice(side, now)
 
     self._dp_maneuver_prev_lc_state = lc_state
     self._dp_maneuver_prev_lc_dir = lc_dir
