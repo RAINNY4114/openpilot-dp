@@ -4,11 +4,11 @@ from enum import IntEnum
 from collections.abc import Callable
 from openpilot.selfdrive.ui.layouts.settings.developer import DeveloperLayout
 from openpilot.selfdrive.ui.layouts.settings.device import DeviceLayout
-from openpilot.selfdrive.ui.layouts.settings.firehose import FirehoseLayout
-from openpilot.selfdrive.ui.layouts.settings.lincoln import LincolnLayout
-from openpilot.selfdrive.ui.layouts.settings.osm_maps import OSMMapsLayout
 from openpilot.selfdrive.ui.layouts.settings.software import SoftwareLayout
 from openpilot.selfdrive.ui.layouts.settings.toggles import TogglesLayout
+from openpilot.selfdrive.ui.layouts.settings.lincoln import LincolnLayout
+from openpilot.selfdrive.ui.layouts.settings.model_manager import ModelManagerLayout
+from openpilot.selfdrive.ui.layouts.settings.osm_maps import OSMMapsLayout
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.system.ui.lib.multilang import tr, tr_noop
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -38,7 +38,7 @@ class PanelType(IntEnum):
   NETWORK = 1
   TOGGLES = 2
   SOFTWARE = 3
-  FIREHOSE = 4
+  MODEL_MANAGER = 4
   DEVELOPER = 5
   DRAGONPILOT = 6
   LINCOLN = 7
@@ -66,7 +66,7 @@ class SettingsLayout(Widget):
       PanelType.NETWORK: PanelInfo(tr_noop("Network"), NetworkUI(wifi_manager)),
       PanelType.TOGGLES: PanelInfo(tr_noop("Toggles"), TogglesLayout()),
       PanelType.SOFTWARE: PanelInfo(tr_noop("Software"), SoftwareLayout()),
-      PanelType.FIREHOSE: PanelInfo(tr_noop("Firehose"), FirehoseLayout()),
+      PanelType.MODEL_MANAGER: PanelInfo(tr_noop("Models"), ModelManagerLayout()),
       PanelType.DEVELOPER: PanelInfo(tr_noop("Developer"), DeveloperLayout()),
       PanelType.DRAGONPILOT: PanelInfo("dp", DragonpilotLayout()),
       PanelType.LINCOLN: PanelInfo("Lincoln", LincolnLayout()),
@@ -157,6 +157,7 @@ class SettingsLayout(Widget):
       panel_info.button_rect = button_rect
 
       y += nav_btn_height
+
   def _draw_current_panel(self, rect: rl.Rectangle):
     rl.draw_rectangle_rounded(
       rl.Rectangle(rect.x + 10, rect.y + 10, rect.width - 20, rect.height - 20), 0.04, 30, PANEL_COLOR
@@ -178,9 +179,10 @@ class SettingsLayout(Widget):
     for panel_type, panel_info in self._panels.items():
       if rl.check_collision_point_rec(mouse_pos, panel_info.button_rect):
         self.set_current_panel(panel_type)
-      return True
+        return True
 
     return False
+
   def set_current_panel(self, panel_type: PanelType):
     if panel_type != self._current_panel:
       self._panels[self._current_panel].instance.hide_event()
