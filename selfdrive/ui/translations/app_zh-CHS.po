@@ -305,6 +305,171 @@ msgstr "车内摄像头"
 msgid "Driving Personality"
 msgstr "驾驶风格"
 
+#: dragonpilot/selfdrive/ui/layouts/settings/dragonpilot.py:152
+#, python-format
+msgid "Dynamic Turn Speed Control (DTSC)"
+msgstr "动态转弯速度控制 (DTSC)"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:77
+msgid "### Curve Speed Control ###"
+msgstr "### 曲线速度控制 ###"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:80
+msgid "Curve Speed Control"
+msgstr "曲线速度控制"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:81
+msgid "Enable FrogPilot-style curve speed control (map + vision)."
+msgstr "使用已下载的地图或驾驶模型在即将到来的弯道前自动减速。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:84
+msgid "Curve Detection Method"
+msgstr "曲线检测方法"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:85
+msgid "How curves are detected. <b>Map-Based</b> uses downloaded map data to identify curves and determine the appropriate speed in which to handle them at, while <b>Vision</b> relies solely on the driving model. <b>Map + Vision</b> uses both and applies the safer (lower) target speed."
+msgstr "弯道检测方式。<b>基于地图</b>使用已下载的地图数据识别弯道并确定合适的通过速度；<b>视觉</b>则完全依赖驾驶模型。<b>地图+视觉</b>同时使用两者，并取更安全（更低）的目标速度。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:86
+msgid "Map Based"
+msgstr "基于地图"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:86
+msgid "Vision"
+msgstr "视觉"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:86
+msgid "Map + Vision"
+msgstr "地图+视觉"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:87
+msgid "The <b>Map Based</b> options are only available when some <b>Map Data</b> has been downloaded!"
+msgstr "“基于地图”的选项仅在已下载部分地图数据后可用！"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:85
+msgid "Curve speed debug log"
+msgstr "弯道限速调试日志"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:86
+msgid "Write curve speed details (model curvature, speed limit, decel) to /data/media/0/lincoln_curve_logs/."
+msgstr "将模型曲率、限速、减速度等写入 /data/media/0/lincoln_curve_logs/ 便于分析。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:151
+msgid "Cone Detection (Experimental)"
+msgstr "锥桶检测（实验）"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:152
+msgid "Detect traffic cones ahead and publish results for UI/debug and future features."
+msgstr "检测前方锥桶并发布结果，用于界面/调试及后续功能。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:100
+msgid "Map-based curve control"
+msgstr "地图弯道控制"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:101
+msgid "Use offline map curvature for curve speed control."
+msgstr "使用离线地图曲率进行弯道限速。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:106
+msgid "Vision-based curve control"
+msgstr "视觉弯道控制"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:107
+msgid "Use model curvature for curve speed control."
+msgstr "使用模型曲率进行弯道限速。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:112
+msgid "Curve Detection Failsafe"
+msgstr "曲线检测故障保护"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:113
+msgid "Only trigger <b>Curve Speed Control</b> if a curve is detected with the model while using the <b>Map-Based</b> method. Useful to help prevent false positives."
+msgstr "仅在使用“基于地图”方法且模型检测到弯道时才触发<b>弯道限速</b>，用于减少误触发。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:118
+msgid "Curve Detection Sensitivity"
+msgstr "曲线检测灵敏度"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:119
+msgid "How sensitive openpilot is when detecting curves. Higher values trigger earlier responses at the risk of triggering too often, while lower values increase confidence at the risk of triggering too infrequently."
+msgstr "openpilot 检测弯道时的灵敏度。数值越高触发越早但可能更频繁；数值越低更保守但可能触发更少。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:128
+msgid "Curve Speed Aggressiveness"
+msgstr "曲线速度激进性"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:129
+msgid "How aggressive openpilot is when navigating through curves. Higher values result in faster turns but may reduce comfort or stability, while lower values result in slower, smoother turns at the risk of being overly cautious."
+msgstr "openpilot 过弯的激进程度。数值越高过弯更快但舒适性/稳定性下降；数值越低更慢更平顺但可能偏保守。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:134
+msgid "Show Curve Speed Control Speed"
+msgstr "显示曲线速度控制目标速度"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:135
+msgid "Show <b>Curve Speed Control</b>'s desired speed on the driving screen."
+msgstr "在驾驶界面显示<b>曲线速度控制</b>的目标速度。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:99
+msgid "Curve lookahead window"
+msgstr "曲率前瞻距离"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:100
+msgid "Default 130 m (50–190). Highway/low visibility: 140–180; city/low speed: 80–110. Higher = earlier slowdown; lower = waits until closer."
+msgstr "默认 130 m（50–190）。高速/视距差：140–180；城市/低速：80–110。调高更早减速，调低更靠近弯才减速。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:110
+msgid "Enter curvature threshold"
+msgstr "进入曲率阈值"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:111
+msgid "Default 0.004 (0.002–0.010). Twisty/mountain: 0.003–0.004; flat/highway: 0.005–0.006. Lower = more sensitive; higher = smoother but later."
+msgstr "默认 0.004（0.002–0.010）。山路/多弯：0.003–0.004；平直/高速：0.005–0.006。调低更敏感，调高更顺但更晚。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:121
+msgid "Comfort lateral limit"
+msgstr "舒适横向上限"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:122
+msgid "Default 1.20 m/s² (1.0–1.5). Stable ride: 1.0–1.1; faster (use caution): 1.3–1.4. Lower = slower/steadier; higher = faster/near limit."
+msgstr "默认 1.20 m/s²（1.0–1.5）。更稳当：1.0–1.1；想更快(慎用)：1.3–1.4。调低更慢更稳，调高更快更靠近极限。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:132
+msgid "Max curve decel"
+msgstr "弯前最大减速度"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:133
+msgid "Default -3.20 m/s² (-3.5 to -2.0). Gentler ride: -2.5~-2.8; need earlier braking: -3.3~-3.5. More negative = earlier/stronger; less negative = gentler/possibly late."
+msgstr "默认 -3.20 m/s²（-3.5 ~ -2.0）。更柔和：-2.5~-2.8；需要更早刹：-3.3~-3.5。越负越早越狠，越接近 0 越温和但可能晚。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:143
+msgid "Exit hold time"
+msgstr "退出保持时间"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:144
+msgid "Default 0.70 s (0.3–1.0). S-bends jitter: 0.8–1.0; few curves: 0.4–0.6. Higher = stay slow longer; lower = release sooner."
+msgstr "默认 0.70 秒（0.3–1.0）。S 弯抖动：0.8–1.0；弯少想快松：0.4–0.6。调高慢速更久，调低更快放松。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:154
+msgid "### Steering Response ###"
+msgstr "### 转向响应 ###"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:156
+msgid "Steer rate (turn-in)"
+msgstr "转向速率（入弯）"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:157
+msgid "Default 100% (80–120), all speeds. Adjust in ±5% steps: higher = quicker turn-in but more warning risk; lower = smoother/slower."
+msgstr "默认 100%（80–120，全速域）。每次±5%小步调：调高入弯更快但更易触发警告，调低更顺更慢。"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:165
+msgid "Steer rate (return)"
+msgstr "转向速率（回正）"
+
+#: selfdrive/ui/layouts/settings/lincoln.py:166
+msgid "Default 100% (80–120), all speeds. Adjust in ±5% steps: higher = faster recenter but more warning risk; lower = gentler/slower."
+msgstr "默认 100%（80–120，全速域）。每次±5%小步调：调高回正更快但更易警告，调低更柔和但更慢。"
+
 #: system/ui/widgets/network.py:123 system/ui/widgets/network.py:139
 #, python-format
 msgid "EDIT"
