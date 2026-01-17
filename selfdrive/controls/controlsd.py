@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import math
+import time
 from numbers import Number
 
 from cereal import car, log
@@ -11,15 +12,16 @@ from openpilot.common.swaglog import cloudlog
 
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.vehicle_model import VehicleModel
-from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
+from openpilot.selfdrive.controls.lib.desire_helper import AUTO_LC_BLINKER_DELAY_SEC
 from openpilot.selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
+from openpilot.selfdrive.livedelay.helpers import get_lat_delay
 from dragonpilot.selfdrive.controls.lib.human_turn_detection import HumanTurnDetection, HTDState
 
 State = log.SelfdriveState.OpenpilotState
@@ -145,8 +147,8 @@ class Controls:
 
     self.sm = messaging.SubMaster(['liveDelay', 'liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
                                    'liveCalibration', 'livePose', 'longitudinalPlan', 'carState', 'carOutput',
-                                   'driverMonitoringState', 'onroadEvents', 'driverAssistance', 'carStateExt'], poll='selfdriveState')
-    self.pm = messaging.PubMaster(['carControl', 'controlsState', 'controlsStateExt'])
+                                   'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
+    self.pm = messaging.PubMaster(['carControl', 'controlsState', 'dpControlsState'])
 
     self.steer_limited_by_safety = False
     self.curvature = 0.0
@@ -165,13 +167,15 @@ class Controls:
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI, DT_CTRL)
 
-    # dp - ALKA: cache enabled state (CP doesn't change after init)
-    self.alka_enabled = bool(self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.ALKA)
+    self.alka_enabled = self.params.get_bool("dp_lat_alka")
     self.alka_active = False
     self.htd = HumanTurnDetection()
     self.htd_state = HTDState.INACTIVE
 
     self._road_edge_curv_correction = 0.0
+    self._auto_lc_blinker_delay_until = 0.0
+    self._auto_lc_blinker_pending = False
+    self._auto_lc_last_state = LaneChangeState.off
 
   def update(self):
     self.sm.update(15)
@@ -208,19 +212,7 @@ class Controls:
 
     # Check which actuators can be enabled
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, 0.3) or CS.standstill
-    # dp - ALKA: check conditions (alka_enabled is cached in __init__)
-    if self.alka_enabled:
-      # Read lkas_on state from carstate (published via carStateExt)
-      lkas_on = self.sm['carStateExt'].lkasOn
-      # Conditions: lkas_on, gear not in P/N/R, calibration complete, seatbelt latched, doors closed
-      calibrated = self.sm['liveCalibration'].calStatus == log.LiveCalibrationData.Status.calibrated
-      gear_ok = CS.gearShifter not in (car.CarState.GearShifter.park,
-                                       car.CarState.GearShifter.neutral,
-                                       car.CarState.GearShifter.reverse)
-      self.alka_active = lkas_on and gear_ok and calibrated and not CS.seatbeltUnlatched and not CS.doorOpen
-    else:
-      self.alka_active = False
-
+    self.alka_active = self.alka_enabled and CS.cruiseState.available and not standstill and CS.gearShifter != car.CarState.GearShifter.reverse
     lat_active = self.sm['selfdriveState'].active or self.alka_active
     htd_allowed, self.htd_state = self.htd.update(lat_active, CS.steeringAngleDeg, CS.steeringTorque, CS.vEgo)
     lat_active = lat_active and htd_allowed
@@ -231,10 +223,35 @@ class Controls:
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state
 
-    # Enable blinkers while lane changing
-    if model_v2.meta.laneChangeState != LaneChangeState.off:
-      CC.leftBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.left
-      CC.rightBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.right
+    lc_state = model_v2.meta.laneChangeState
+    lc_dir = model_v2.meta.laneChangeDirection
+    one_blinker = CS.leftBlinker != CS.rightBlinker
+    now_mono = time.monotonic()
+
+    if lc_state == LaneChangeState.off:
+      self._auto_lc_blinker_delay_until = 0.0
+      self._auto_lc_blinker_pending = False
+    elif self._auto_lc_last_state == LaneChangeState.off and lc_state == LaneChangeState.preLaneChange:
+      if not one_blinker:
+        self._auto_lc_blinker_delay_until = now_mono + AUTO_LC_BLINKER_DELAY_SEC
+        self._auto_lc_blinker_pending = True
+
+    # Enable blinkers while lane changing (auto requests can delay briefly so voice leads).
+    if lc_state != LaneChangeState.off:
+      if lc_state != LaneChangeState.preLaneChange:
+        self._auto_lc_blinker_pending = False
+
+      allow_blinker = True
+      if self._auto_lc_blinker_pending and now_mono < self._auto_lc_blinker_delay_until:
+        allow_blinker = False
+      else:
+        self._auto_lc_blinker_pending = False
+
+      if allow_blinker:
+        CC.leftBlinker = lc_dir == LaneChangeDirection.left
+        CC.rightBlinker = lc_dir == LaneChangeDirection.right
+
+    self._auto_lc_last_state = lc_state
 
     if not CC.latActive:
       self.LaC.reset()
@@ -264,7 +281,7 @@ class Controls:
       new_desired_curvature = float(new_desired_curvature) + float(self._road_edge_curv_correction)
 
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
-    lat_delay = self.sm["liveDelay"].lateralDelay + LAT_SMOOTH_SECONDS
+    lat_delay = get_lat_delay(self.params, self.sm["liveDelay"].lateralDelay, self.CP.steerActuatorDelay) + LAT_SMOOTH_SECONDS
 
     actuators.curvature = self.desired_curvature
     steer, steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
@@ -323,6 +340,13 @@ class Controls:
     # TODO: both controlsState and carControl valids should be set by
     #       sm.all_checks(), but this creates a circular dependency
 
+    # dpControlsState
+    dat = messaging.new_message('dpControlsState')
+    dat.valid = True
+    ncs = dat.dpControlsState
+    ncs.alkaActive = self.alka_active
+    self.pm.send('dpControlsState', dat)
+
     # controlsState
     dat = messaging.new_message('controlsState')
     dat.valid = CS.canValid
@@ -348,12 +372,6 @@ class Controls:
       cs.lateralControlState.torqueState = lac_log
 
     self.pm.send('controlsState', dat)
-
-    # controlsStateExt
-    dat = messaging.new_message('controlsStateExt')
-    dat.valid = True
-    dat.controlsStateExt.alkaActive = self.alka_active
-    self.pm.send('controlsStateExt', dat)
 
     # carControl
     cc_send = messaging.new_message('carControl')
