@@ -54,12 +54,14 @@ class UIState:
         "gpsLocationExternal",
         "gpsLocation",
         "livePose",
+        "liveDelay",
         "carOutput",
         "carControl",
         "liveParameters",
         "rawAudioData",
         "controlsStateExt",
         "liveTracks", # dp - for dp_ui_lead
+        "modelManagerSP",
         "customReservedRawData0",
       ]
     )
