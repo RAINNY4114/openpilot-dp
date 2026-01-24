@@ -20,3 +20,13 @@ if [ -z "$AGNOS_VERSION" ]; then
 fi
 
 export STAGING_ROOT="/data/safe_staging"
+
+# Prefer the repo venv on PC/WSL so UI deps like pyray are found.
+if [ -n "$DIR" ] && [ -d "$DIR/.venv/bin" ]; then
+  export PATH="$DIR/.venv/bin:$PATH"
+fi
+
+# Force big UI on PC/WSL unless explicitly overridden.
+if [ ! -f /TICI ] && [ -z "$BIG" ]; then
+  export BIG=1
+fi

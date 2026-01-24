@@ -59,7 +59,7 @@ class UIState:
         "carControl",
         "liveParameters",
         "rawAudioData",
-        "controlsStateExt",
+        "dpControlsState",
         "liveTracks", # dp - for dp_ui_lead
         "modelManagerSP",
         "customReservedRawData0",
@@ -180,8 +180,8 @@ class UIState:
     self.always_on_dm = self.params.get_bool("AlwaysOnDM")
 
     # dp - ALKA
-    if self.sm.updated["controlsStateExt"]:
-      self.dp_alka_active = self.sm["controlsStateExt"].alkaActive
+    if self.sm.updated["dpControlsState"]:
+      self.dp_alka_active = self.sm["dpControlsState"].alkaActive
 
     # dp
     self.dp_ui_display_mode = int(self.params.get("dp_ui_display_mode") or 0)

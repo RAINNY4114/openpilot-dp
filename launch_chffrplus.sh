@@ -93,8 +93,10 @@ function launch {
     fi
   fi
 
-  # handle pythonpath
-  ln -sfn $(pwd) /data/pythonpath
+  # handle pythonpath (guard for non-root environments like WSL)
+  if [ -w /data ]; then
+    ln -sfn "$(pwd)" /data/pythonpath
+  fi
   export PYTHONPATH="$PWD"
 
   # hardware specific init
@@ -104,8 +106,10 @@ function launch {
     agnos_init
   fi
 
-  # write tmux scrollback to a file
-  tmux capture-pane -pq -S-1000 > /tmp/launch_log
+  # write tmux scrollback to a file (only if tmux session exists)
+  if command -v tmux >/dev/null 2>&1 && tmux has-session 2>/dev/null; then
+    tmux capture-pane -pq -S-1000 > /tmp/launch_log
+  fi
 
   # start manager
   cd system/manager

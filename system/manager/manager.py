@@ -64,6 +64,10 @@ def manager_init() -> None:
     default_value = params.get_default_value(k)
     if default_value is not None and params.get(k) is None:
       params.put(k, default_value)
+  # Force C3 UI by disabling the C4 UI toggle.
+  params.put_bool("dp_ui_four", False)
+  if params.check_key("dp_ui_mici"):
+    params.put_bool("dp_ui_mici", False)
   params.put("dp_dev_model_list", VehicleModelCollector().get())
 
   # Create folders needed for msgq

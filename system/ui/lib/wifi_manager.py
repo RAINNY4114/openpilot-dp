@@ -68,6 +68,13 @@ def get_security_type(flags: int, wpa_flags: int, rsn_flags: int) -> SecurityTyp
     return SecurityType.UNSUPPORTED
 
 
+def _valid_object_path(path: object) -> bool:
+  try:
+    return isinstance(path, (str, bytes)) and str(path).startswith("/")
+  except Exception:
+    return False
+
+
 @dataclass(frozen=True)
 class Network:
   ssid: str
@@ -299,6 +306,8 @@ class WifiManager:
     try:
       device_paths = self._router_main.send_and_get_reply(new_method_call(self._nm, 'GetDevices')).body[0]
       for device_path in device_paths:
+        if not _valid_object_path(device_path):
+          continue
         dev_addr = DBusAddress(device_path, bus_name=NM, interface=NM_DEVICE_IFACE)
         dev_type = self._router_main.send_and_get_reply(Properties(dev_addr).get('DeviceType')).body[0][1]
         if dev_type == adapter_type:
@@ -329,6 +338,8 @@ class WifiManager:
     return self._router_main.send_and_get_reply(Properties(self._nm).get('ActiveConnections')).body[0][1]
 
   def _get_connection_settings(self, conn_path: str) -> dict:
+    if not _valid_object_path(conn_path):
+      return {}
     conn_addr = DBusAddress(conn_path, bus_name=NM, interface=NM_CONNECTION_IFACE)
     reply = self._router_main.send_and_get_reply(new_method_call(conn_addr, 'GetSettings'))
     if reply.header.message_type == MessageType.error:
@@ -732,6 +743,8 @@ class WifiManager:
       known_connections = self._router_main.send_and_get_reply(new_method_call(settings_addr, 'ListConnections')).body[0]
 
       for conn_path in known_connections:
+        if not _valid_object_path(conn_path):
+          continue
         settings = self._get_connection_settings(conn_path)
         if settings and settings.get('connection', {}).get('id', ('s', ''))[1] == 'lte':
           return str(conn_path)

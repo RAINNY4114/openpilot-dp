@@ -16,7 +16,7 @@ def main():
   config_realtime_process(0, 51)
 
   gui_app.init_window("UI")
-  if gui_app.big_ui() and not Params().get_bool("dp_ui_mici"):
+  if gui_app.big_ui() and not Params().get_bool("dp_ui_four"):
     main_layout = MainLayout()
   else:
     main_layout = MiciMainLayout()

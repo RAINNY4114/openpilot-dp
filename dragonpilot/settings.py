@@ -188,9 +188,9 @@ SETTINGS = [
         "condition": "not MICI",
       },
       {
-        "key": "dp_ui_mici",
+        "key": "dp_ui_four",
         "type": "toggle_item",
-        "title": lambda: tr("Use MICI (comma four) UI"),
+        "title": lambda: tr("Use C4 (comma four) UI"),
         "description": lambda: tr("Why not?"),
         "condition": "not MICI",
       },

@@ -199,16 +199,16 @@ class GuiApplication:
   def __init__(self, width: int | None = None, height: int | None = None):
     self._fonts: dict[FontWeight, rl.Font] = {}
     if Params is not None:
-      dp_ui_mici = Params().get_bool("dp_ui_mici")
+      dp_ui_four = Params().get_bool("dp_ui_four")
     else:
-      dp_ui_mici = False
-    self._width = width if width is not None else GuiApplication._default_width(dp_ui_mici)
-    self._height = height if height is not None else GuiApplication._default_height(dp_ui_mici)
+      dp_ui_four = False
+    self._width = width if width is not None else GuiApplication._default_width(dp_ui_four)
+    self._height = height if height is not None else GuiApplication._default_height(dp_ui_four)
 
     if PC and os.getenv("SCALE") is None:
       self._scale = self._calculate_auto_scale()
     else:
-      self._scale = 4.0 if dp_ui_mici else SCALE
+      self._scale = 4.0 if dp_ui_four else SCALE
 
     # Scale, then ensure dimensions are even
     self._scaled_width = int(self._width * self._scale)

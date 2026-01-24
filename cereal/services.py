@@ -3,14 +3,16 @@ from typing import Optional
 
 
 class Service:
-  def __init__(self, should_log: bool, frequency: float, decimation: Optional[int] = None):
+  def __init__(self, should_log: bool, frequency: float, decimation: Optional[int] = None,
+               queue_size: int = 0):
     self.should_log = should_log
     self.frequency = frequency
     self.decimation = decimation
+    self.queue_size = queue_size
 
 
 _services: dict[str, tuple] = {
-  # service: (should_log, frequency, qlog decimation (optional))
+  # service: (should_log, frequency, qlog decimation (optional), queue_size (optional))
   # note: the "EncodeIdx" packets will still be in the log
   "gyroscope": (True, 104., 104),
   "gyroscope2": (True, 100., 100),
@@ -99,7 +101,22 @@ _services: dict[str, tuple] = {
   "dpControlsState": (False, 100., 10),
   "modelExt": (True, 20.),
 }
-SERVICE_LIST = {name: Service(*vals) for
+def _parse_service(vals: tuple) -> Service:
+  if len(vals) == 2:
+    should_log, frequency = vals
+    decimation = None
+    queue_size = 0
+  elif len(vals) == 3:
+    should_log, frequency, decimation = vals
+    queue_size = 0
+  elif len(vals) == 4:
+    should_log, frequency, decimation, queue_size = vals
+  else:
+    raise ValueError(f"Invalid service tuple length: {len(vals)}")
+  return Service(should_log, frequency, decimation, queue_size)
+
+
+SERVICE_LIST = {name: _parse_service(vals) for
                 idx, (name, vals) in enumerate(_services.items())}
 
 
@@ -112,13 +129,14 @@ def build_header():
   h += "#include <map>\n"
   h += "#include <string>\n"
 
-  h += "struct service { std::string name; bool should_log; float frequency; int decimation; };\n"
+  h += "struct service { std::string name; bool should_log; float frequency; int decimation; int queue_size; };\n"
   h += "static std::map<std::string, service> services = {\n"
   for k, v in SERVICE_LIST.items():
     should_log = "true" if v.should_log else "false"
     decimation = -1 if v.decimation is None else v.decimation
-    h += '  { "%s", {"%s", %s, %f, %d}},\n' % \
-         (k, k, should_log, v.frequency, decimation)
+    queue_size = 0 if v.queue_size is None else v.queue_size
+    h += '  { "%s", {"%s", %s, %f, %d, %d}},\n' % \
+         (k, k, should_log, v.frequency, decimation, queue_size)
   h += "};\n"
 
   h += "#endif\n"
