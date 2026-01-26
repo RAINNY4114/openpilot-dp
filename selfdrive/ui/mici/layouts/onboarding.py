@@ -348,11 +348,11 @@ class TrainingGuide(Widget):
 
   def show_event(self):
     super().show_event()
-    device.set_override_interactive_timeout(300)
+    device.reset_interactive_timeout(300)
 
   def hide_event(self):
     super().hide_event()
-    device.set_override_interactive_timeout(None)
+    device.reset_interactive_timeout()
 
   def _advance_step(self):
     if self._step < len(self._steps) - 1:
@@ -452,11 +452,11 @@ class OnboardingWindow(Widget):
 
   def show_event(self):
     super().show_event()
-    device.set_override_interactive_timeout(300)
+    device.reset_interactive_timeout(300)
 
   def hide_event(self):
     super().hide_event()
-    device.set_override_interactive_timeout(None)
+    device.reset_interactive_timeout()
 
   @property
   def completed(self) -> bool:
