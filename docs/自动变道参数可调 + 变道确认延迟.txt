@@ -1,0 +1,107 @@
+﻿829e339 变更说明（自动变道参数可调 + 变道确认延迟）
+
+0) 变更概述
+- 新增两个 Lincoln 自动超车/自动变道相关参数：最小巡航设定速度、确认延迟。
+- 自动超车触发阈值由固定值改为“参数可调 + 安全夹取”。
+- 自动变道启动延迟由固定 3 秒改为“参数可调 + 打灯延迟”（对自动超车/自动避让均生效）。
+- Lincoln 面板增加 2 个数值调节项，并补充中文翻译。
+
+1) 变更文件清单
+- common/params_keys.h
+- selfdrive/controls/lib/auto_overtake.py
+- selfdrive/controls/lib/desire_helper.py
+- selfdrive/modeld/modeld.py
+- selfdrive/ui/layouts/settings/lincoln.py
+- selfdrive/ui/translations/app_zh-CHS.po
+- docs/林肯面板_自动超车_复刻文档.md（同步文档）
+- docs/林肯面板_自动避让_复刻文档.md（同步文档）
+
+2) 新增参数（common/params_keys.h）
+- dp_lincoln_auto_overtake_min_cruise_kph
+  - 类型: PERSISTENT INT
+  - 默认: 90
+  - 范围(代码夹取): 60 ~ 140 (km/h)
+  - 用途: 自动超车触发的“最低巡航设定速度”门槛
+- dp_lincoln_auto_lc_confirm_delay_sec
+  - 类型: PERSISTENT INT
+  - 默认: 3
+  - 范围(代码夹取): 0 ~ 10 (sec)
+  - 用途: 自动变道确认延迟（语音+自动打灯后等待时长）
+
+3) 功能改动与逻辑细节
+3.1 auto_overtake.py
+- _update_need_overtake 新增参数: min_cruise_speed、min_speed
+- update 新增参数: min_cruise_speed (可选)，默认回退 OVERTAKE_MIN_CRUISE_SPEED
+- 新增规则:
+  - min_speed = min(OVERTAKE_MIN_SPEED, min_cruise_speed)
+  - v_cruise >= min_cruise_speed 且 v_ego >= min_speed 才允许进入 need_overtake
+- 其余超车判定逻辑保持不变:
+  - headway <= OVERTAKE_HEADWAY_MAX_S
+  - (v_cruise - v_lead) >= OVERTAKE_SPEED_DELTA
+  - 稳定持续 >= OVERTAKE_LEAD_STABLE_SEC
+
+3.2 desire_helper.py
+- 新增常量 AUTO_LC_DEFAULT_CONFIRM_DELAY_SEC = 3.0
+- DesireHelper.update 新增参数: auto_confirm_delay_sec (可选)
+- 计算逻辑:
+  - auto_confirm_delay = auto_confirm_delay_sec 或默认 3.0
+  - auto_confirm_delay < 0 时强制为 0
+  - auto_start_delay = auto_confirm_delay + AUTO_LC_BLINKER_DELAY_SEC
+  - 进入 preLaneChange 后，等待 auto_start_delay 才会“施加虚拟扭矩”进入 laneChangeStarting
+
+3.3 modeld.py
+- 读取并夹取 dp_lincoln_auto_lc_confirm_delay_sec
+  - 读取失败回退 3.0
+  - clamp: 0.0 ~ 10.0
+- 读取并夹取 dp_lincoln_auto_overtake_min_cruise_kph
+  - 读取失败回退 90
+  - clamp: 60 ~ 140
+  - 转 m/s: min_cruise_speed = kph * CV.KPH_TO_MS
+- 调用链改动:
+  - AutoOvertakeHelper.update(..., min_cruise_speed=min_cruise_speed)
+  - DesireHelper.update(..., auto_confirm_delay_sec=auto_lc_confirm_delay_sec)
+
+3.4 Lincoln 面板 UI (selfdrive/ui/layouts/settings/lincoln.py)
+- 增加 2 个 Spin 控件，均为即时生效参数：
+  - Auto lane-change min speed
+    - 对应 dp_lincoln_auto_overtake_min_cruise_kph
+    - 范围 60~140, 步进 1, 单位 km/h
+  - Auto lane-change confirm delay
+    - 对应 dp_lincoln_auto_lc_confirm_delay_sec
+    - 范围 0~10, 步进 1, 单位 sec
+
+3.5 中文翻译 (selfdrive/ui/translations/app_zh-CHS.po)
+- 新增 4 条翻译:
+  - Auto lane-change min speed
+  - Minimum cruise set speed required for auto overtake (km/h).
+  - Auto lane-change confirm delay
+  - Seconds to wait after voice + auto blinker before starting an automatic lane change.
+
+4) 复刻实施步骤（删除 829e339 后重新开发）
+1. params_keys.h:
+   - 注册 dp_lincoln_auto_overtake_min_cruise_kph 与 dp_lincoln_auto_lc_confirm_delay_sec
+2. auto_overtake.py:
+   - update() 增加 min_cruise_speed 入参
+   - 计算 min_speed = min(OVERTAKE_MIN_SPEED, min_cruise_speed)
+   - _update_need_overtake 使用 v_cruise>=min_cruise_speed 且 v_ego>=min_speed
+3. desire_helper.py:
+   - 新增 auto_confirm_delay_sec 入参
+   - auto_start_delay = auto_confirm_delay_sec + AUTO_LC_BLINKER_DELAY_SEC
+   - preLaneChange 进入 laneChangeStarting 的判定改为 auto_start_delay
+4. modeld.py:
+   - 读取/夹取 dp_lincoln_auto_overtake_min_cruise_kph（60~140）并转 m/s
+   - 读取/夹取 dp_lincoln_auto_lc_confirm_delay_sec（0~10）
+   - 传参给 AutoOvertakeHelper.update / DesireHelper.update
+5. lincoln.py:
+   - 新增 2 个数值调节项（Spin），写入 params
+6. app_zh-CHS.po:
+   - 增加对应中文翻译
+
+5) 验证要点
+- v_cruise < min_cruise_speed 时不进入自动超车。
+- min_cruise_speed 调低到 60 时，v_ego 触发阈值随之降低到 60。
+- auto_confirm_delay_sec 为 0 时，自动变道在 AUTO_LC_BLINKER_DELAY_SEC 后启动。
+- auto_confirm_delay_sec 为 10 时，自动变道等待时间增加。
+- UI 参数调节即时生效且重启保留。
+
+

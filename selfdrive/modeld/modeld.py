@@ -716,6 +716,25 @@ def main(demo=False):
         lane_pref = 0
       lane_pref = lane_pref if lane_pref in (0, 1, 2) else 0
 
+      try:
+        raw_min_cruise = params.get("dp_lincoln_auto_overtake_min_cruise_kph") or b"90"
+        if isinstance(raw_min_cruise, bytes):
+          raw_min_cruise = raw_min_cruise.decode("utf-8", errors="ignore")
+        min_cruise_kph = float(str(raw_min_cruise).strip() or "90")
+      except Exception:
+        min_cruise_kph = 90.0
+      min_cruise_kph = min(140.0, max(60.0, min_cruise_kph))
+      min_cruise_speed = min_cruise_kph * CV.KPH_TO_MS
+
+      try:
+        raw_confirm_delay = params.get("dp_lincoln_auto_lc_confirm_delay_sec") or b"3"
+        if isinstance(raw_confirm_delay, bytes):
+          raw_confirm_delay = raw_confirm_delay.decode("utf-8", errors="ignore")
+        auto_lc_confirm_delay_sec = float(str(raw_confirm_delay).strip() or "3")
+      except Exception:
+        auto_lc_confirm_delay_sec = 3.0
+      auto_lc_confirm_delay_sec = min(10.0, max(0.0, auto_lc_confirm_delay_sec))
+
       overtake_dir = AO.update(
         enabled=params.get_bool("dp_lincoln_auto_overtake") and lat_active and cruise_enabled,
         lc_state=DH.lane_change_state,
@@ -729,6 +748,7 @@ def main(demo=False):
         is_rhd=bool(is_rhd),
         manual_blinker=bool(one_blinker),
         bsm_available=bsm_available,
+        min_cruise_speed=min_cruise_speed,
         lane_preference=lane_pref,
       )
 
@@ -784,7 +804,7 @@ def main(demo=False):
       auto_dir = avoid_dir if avoid_dir != log.LaneChangeDirection.none else overtake_dir
       lc_state_before_update = DH.lane_change_state
       DH.update(cs, lat_active, lane_change_prob, RED.left_edge_detected, RED.right_edge_detected,
-                auto_lane_change_direction=auto_dir)
+                auto_lane_change_direction=auto_dir, auto_confirm_delay_sec=auto_lc_confirm_delay_sec)
       if AUTO_LC_POST_FINISH_COOLDOWN_SEC > 0.0:
         if lc_state_before_update == log.LaneChangeState.laneChangeFinishing and DH.lane_change_state == log.LaneChangeState.off:
           auto_lc_post_finish_until = max(float(auto_lc_post_finish_until), now_mono + AUTO_LC_POST_FINISH_COOLDOWN_SEC)
