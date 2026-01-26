@@ -2228,6 +2228,8 @@ struct DriverMonitoringState @0xb83cda094a1da284 {
   posePitchValidCount @7 :UInt32;
   poseYawOffset @8 :Float32;
   poseYawValidCount @9 :UInt32;
+  phoneProbOffset @20 :Float32;
+  phoneProbValidCount @21 :UInt32;
   stepChange @10 :Float32;
   awarenessActive @11 :Float32;
   awarenessPassive @12 :Float32;
