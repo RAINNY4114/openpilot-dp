@@ -15,7 +15,16 @@ class CarState(CarStateBase):
     super().__init__(CP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     if CP.transmissionType == TransmissionType.automatic:
-      self.shifter_values = can_define.dv["PowertrainData_10"]["TrnRng_D_Rq"]
+      self.use_alt_gear = bool(CP.flags & FordFlags.ALT_GEAR)
+      self.gear_msg = "TransGearData" if self.use_alt_gear else "PowertrainData_10"
+      self.gear_signal = "GearLvrPos_D_Actl" if self.use_alt_gear else "TrnRng_D_Rq"
+      self.shifter_values = can_define.dv[self.gear_msg][self.gear_signal]
+    else:
+      self.use_alt_gear = False
+      self.gear_msg = ""
+      self.gear_signal = ""
+
+    self.steering_msg = "SteeringPinion_Data_Alt" if CP.flags & FordFlags.ALT_STEER_ANGLE else "SteeringPinion_Data"
 
     self.distance_button = 0
     self.lc_button = 0
@@ -28,7 +37,7 @@ class CarState(CarStateBase):
 
     # Occasionally on startup, the ABS module recalibrates the steering pinion offset, so we need to block engagement
     # The vehicle usually recovers out of this state within a minute of normal driving
-    ret.vehicleSensorsInvalid = cp.vl["SteeringPinion_Data"]["StePinCompAnEst_D_Qf"] != 3
+    ret.vehicleSensorsInvalid = cp.vl[self.steering_msg]["StePinCompAnEst_D_Qf"] != 3
 
     # car speed
     ret.vEgoRaw = cp.vl["BrakeSysFeatures"]["Veh_V_ActlBrk"] * CV.KPH_TO_MS
@@ -45,7 +54,28 @@ class CarState(CarStateBase):
     ret.parkingBrake = cp.vl["DesiredTorqBrk"]["PrkBrkStatus"] in (1, 2)
 
     # steering wheel
-    ret.steeringAngleDeg = cp.vl["SteeringPinion_Data"]["StePinComp_An_Est"]
+    if self.CP.flags & FordFlags.ALT_STEER_ANGLE:
+      steering_data = cp.vl[self.steering_msg]
+      steer_init = steering_data["StePinRelInit_An_Sns"]
+
+      park_aid_pt_ts = cp.ts_nanos.get("ParkAid_Data", {}).get("ExtSteeringAngleReq2", 0)
+      park_aid_cam_ts = cp_cam.ts_nanos.get("ParkAid_Data", {}).get("ExtSteeringAngleReq2", 0)
+      park_aid = cp_cam if park_aid_cam_ts > park_aid_pt_ts else cp
+      park_aid_data = park_aid.vl["ParkAid_Data"]
+
+      ext_angle = park_aid_data["ExtSteeringAngleReq2"]
+      ext_angle_raw = int((ext_angle + 1000.0) * 10.0)
+      ext_valid = (
+        park_aid_data["EPASExtAngleStatReq"] == 0 and
+        park_aid_data["ApaSys_D_Stat"] in (0, 1) and
+        ext_angle_raw not in (32766, 32767)
+      )
+      if ext_valid:
+        ret.steeringAngleDeg = steer_init + (ext_angle - steer_init)
+      else:
+        ret.steeringAngleDeg = steer_init
+    else:
+      ret.steeringAngleDeg = cp.vl[self.steering_msg]["StePinComp_An_Est"]
     ret.steeringTorque = cp.vl["EPAS_INFO"]["SteeringColumnTorque"]
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > CarControllerParams.STEER_DRIVER_ALLOWANCE, 5)
     ret.steerFaultTemporary = cp.vl["EPAS_INFO"]["EPAS_Failure"] == 1
@@ -69,7 +99,7 @@ class CarState(CarStateBase):
 
     # gear
     if self.CP.transmissionType == TransmissionType.automatic:
-      gear = self.shifter_values.get(cp.vl["PowertrainData_10"]["TrnRng_D_Rq"])
+      gear = self.shifter_values.get(cp.vl[self.gear_msg][self.gear_signal])
       ret.gearShifter = self.parse_gear_shifter(gear)
     elif self.CP.transmissionType == TransmissionType.manual:
       if bool(cp.vl["BCM_Lamp_Stat_FD1"]["RvrseLghtOn_B_Stat"]):
