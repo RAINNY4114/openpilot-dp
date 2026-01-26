@@ -89,7 +89,8 @@ struct ModelManagerSP @0xf35cc4560bbf6ec2 {
   }
 }
 
-struct CustomReserved3 @0xda96579883444c35 {
+struct CarStateExt @0xda96579883444c35 {
+  lkasOn @0 :Bool;
 }
 
 struct CustomReserved4 @0x80ae746ee2596b11 {

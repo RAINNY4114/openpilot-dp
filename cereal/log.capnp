@@ -2639,7 +2639,7 @@ struct Event {
     dpControlsState @107 :Custom.DpControlsState;
     modelExt @108 :Custom.ModelExt;
     modelManagerSP @109 :Custom.ModelManagerSP;
-    customReserved3 @110 :Custom.CustomReserved3;
+    carStateExt @110 :Custom.CarStateExt;
     customReserved4 @111 :Custom.CustomReserved4;
     customReserved5 @112 :Custom.CustomReserved5;
     customReserved6 @113 :Custom.CustomReserved6;
