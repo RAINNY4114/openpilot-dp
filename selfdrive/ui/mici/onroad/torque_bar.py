@@ -6,6 +6,7 @@ from collections import OrderedDict
 import numpy as np
 import pyray as rl
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY
+from openpilot.selfdrive.controls.lib.drive_helpers import MAX_CURVATURE, MAX_LATERAL_ACCEL_NO_ROLL
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app
@@ -150,8 +151,11 @@ class TorqueBar(Widget):
     super().__init__()
     self._demo = demo
     self._torque_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
+    self._curve_intensity_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
     self._torque_line_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
     self._scale = scale
+    self._angle_mode = False
+    self._confidence_color = rl.Color(255, 255, 255, 255)
 
   def update_filter(self, value: float):
     """Update the torque filter value (for demo mode)."""
@@ -162,27 +166,61 @@ class TorqueBar(Widget):
       return
 
     # torque line
-    if ui_state.sm['controlsState'].lateralControlState.which() == 'angleState':
+    self._angle_mode = ui_state.sm['controlsState'].lateralControlState.which() == 'angleState'
+    if self._angle_mode:
       controls_state = ui_state.sm['controlsState']
       car_state = ui_state.sm['carState']
       live_parameters = ui_state.sm['liveParameters']
-      lateral_acceleration = controls_state.curvature * car_state.vEgo ** 2 - live_parameters.roll * ACCELERATION_DUE_TO_GRAVITY
-      # TODO: pull from carparams
-      max_lateral_acceleration = 3
+      model = ui_state.sm['modelV2']
 
-      # from selfdrived
-      actual_lateral_accel = controls_state.curvature * car_state.vEgo ** 2
-      desired_lateral_accel = controls_state.desiredCurvature * car_state.vEgo ** 2
-      accel_diff = (desired_lateral_accel - actual_lateral_accel)
+      lane_conf = 0.0
+      lane_probs = getattr(model, "laneLineProbs", None) or []
+      if len(lane_probs) >= 3:
+        lane_conf = float(min(lane_probs[1], lane_probs[2]))
 
-      self._torque_filter.update(min(max(lateral_acceleration / max_lateral_acceleration + accel_diff, -1), 1))
+      edge_conf = 0.0
+      edge_stds = getattr(model, "roadEdgeStds", None) or []
+      if len(edge_stds) > 0:
+        edge_conf = float(np.clip(1.0 - max(edge_stds), 0.0, 1.0))
+
+      confidence = float(np.clip(0.7 * lane_conf + 0.3 * edge_conf, 0.0, 1.0))
+      if not np.isfinite(confidence):
+        confidence = 0.0
+      desired_curv = float(controls_state.desiredCurvature)
+      if not np.isfinite(desired_curv):
+        desired_curv = 0.0
+      curv_sign = 1.0 if desired_curv >= 0.0 else -1.0
+      self._torque_filter.update(curv_sign * confidence)
+
+      v_ego = max(float(car_state.vEgo), 1.0)
+      max_lat_accel = MAX_LATERAL_ACCEL_NO_ROLL + float(live_parameters.roll) * ACCELERATION_DUE_TO_GRAVITY
+      curv_limit = min(MAX_CURVATURE, max_lat_accel / (v_ego ** 2))
+      curv_ratio = abs(desired_curv) / max(curv_limit, 1e-6)
+      bar_mag = float(np.clip(curv_ratio, 0.0, 1.0))
+      if not np.isfinite(bar_mag):
+        bar_mag = 0.0
+      self._curve_intensity_filter.update(bar_mag)
+
+      if confidence >= 0.7:
+        self._confidence_color = rl.Color(0, 255, 120, 255)
+      elif confidence >= 0.4:
+        self._confidence_color = rl.Color(255, 200, 0, 255)
+      else:
+        self._confidence_color = rl.Color(255, 80, 80, 255)
     else:
       self._torque_filter.update(-ui_state.sm['carOutput'].actuatorsOutput.torque)
+      self._curve_intensity_filter.update(abs(self._torque_filter.x))
 
   def _render(self, rect: rl.Rectangle) -> None:
+    base_ui_w = 536.0
+    base_ui_h = 240.0
+    scale = self._scale * min(rect.width / base_ui_w, rect.height / base_ui_h)
+
+    bar_mag = abs(self._curve_intensity_filter.x) if self._angle_mode else abs(self._torque_filter.x)
+
     # adjust y pos with torque
-    torque_line_offset = np.interp(abs(self._torque_filter.x), [0.5, 1], [22 * self._scale, 26 * self._scale])
-    torque_line_height = np.interp(abs(self._torque_filter.x), [0.5, 1], [14 * self._scale, 56 * self._scale])
+    torque_line_offset = np.interp(bar_mag, [0.5, 1], [22 * scale, 26 * scale])
+    torque_line_height = np.interp(bar_mag, [0.5, 1], [14 * scale, 56 * scale])
 
     # animate alpha and angle span
     if not self._demo:
@@ -190,13 +228,13 @@ class TorqueBar(Widget):
     else:
       self._torque_line_alpha_filter.update(1.0)
 
-    torque_line_bg_alpha = np.interp(abs(self._torque_filter.x), [0.5, 1.0], [0.25, 0.5])
+    torque_line_bg_alpha = np.interp(bar_mag, [0.5, 1.0], [0.25, 0.5])
     torque_line_bg_color = rl.Color(255, 255, 255, int(255 * torque_line_bg_alpha * self._torque_line_alpha_filter.x))
     if ui_state.status != UIStatus.ENGAGED and not self._demo and not ui_state.dp_alka_active:
       torque_line_bg_color = rl.Color(255, 255, 255, int(255 * 0.15 * self._torque_line_alpha_filter.x))
 
     # draw curved line polygon torque bar
-    torque_line_radius = 1200 * self._scale
+    torque_line_radius = 1200 * scale
     top_angle = -90
     torque_bg_angle_span = self._torque_line_alpha_filter.x * TORQUE_ANGLE_SPAN
     torque_start_angle = top_angle - torque_bg_angle_span / 2
@@ -204,11 +242,11 @@ class TorqueBar(Widget):
     # centerline radius & center (you already have these values)
     mid_r = torque_line_radius + torque_line_height / 2
 
-    cx = rect.x + rect.width / 2 + (8 * self._scale)
+    cx = rect.x + rect.width / 2 + (8 * scale)
     cy = rect.y + rect.height + torque_line_radius - torque_line_offset
 
     # dp - pass cap_radius explicitly so the corners round properly
-    scaled_cap_radius = 7 * self._scale
+    scaled_cap_radius = 7 * scale
 
     # draw bg torque indicator line
     bg_pts = arc_bar_pts(cx, cy, mid_r, torque_line_height, torque_start_angle, torque_end_angle,
@@ -221,42 +259,50 @@ class TorqueBar(Widget):
     sl_pts = arc_bar_pts(cx, cy, mid_r, torque_line_height, a0s, a1s,
                          cap_radius=scaled_cap_radius)
 
-    # draw beautiful gradient from center to 65% of the bg torque bar width
-    start_grad_pt = cx / rect.width
-    if self._torque_filter.x < 0:
-      end_grad_pt = (cx * (1 - 0.65) + (min(bg_pts[:, 0]) * 0.65)) / rect.width
+    if self._angle_mode:
+      alpha_scale = (0.35 + 0.65 * bar_mag) * self._torque_line_alpha_filter.x
+      if ui_state.status != UIStatus.ENGAGED and not self._demo and not ui_state.dp_alka_active:
+        alpha_scale *= 0.35
+      conf_color = rl.Color(self._confidence_color.r, self._confidence_color.g, self._confidence_color.b,
+                            int(255 * alpha_scale))
+      draw_polygon(rect, sl_pts, color=conf_color)
     else:
-      end_grad_pt = (cx * (1 - 0.65) + (max(bg_pts[:, 0]) * 0.65)) / rect.width
+      # draw beautiful gradient from center to 65% of the bg torque bar width
+      start_grad_pt = cx / rect.width
+      if self._torque_filter.x < 0:
+        end_grad_pt = (cx * (1 - 0.65) + (min(bg_pts[:, 0]) * 0.65)) / rect.width
+      else:
+        end_grad_pt = (cx * (1 - 0.65) + (max(bg_pts[:, 0]) * 0.65)) / rect.width
 
-    # fade to orange as we approach max torque
-    start_color = blend_colors(
-      rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
-      rl.Color(255, 200, 0, int(255 * self._torque_line_alpha_filter.x)),  # yellow
-      max(0, abs(self._torque_filter.x) - 0.75) * 4,
-    )
-    end_color = blend_colors(
-      rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
-      rl.Color(255, 115, 0, int(255 * self._torque_line_alpha_filter.x)),  # orange
-      max(0, abs(self._torque_filter.x) - 0.75) * 4,
-    )
+      # fade to orange as we approach max torque
+      start_color = blend_colors(
+        rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
+        rl.Color(255, 200, 0, int(255 * self._torque_line_alpha_filter.x)),  # yellow
+        max(0, abs(self._torque_filter.x) - 0.75) * 4,
+      )
+      end_color = blend_colors(
+        rl.Color(255, 255, 255, int(255 * 0.9 * self._torque_line_alpha_filter.x)),
+        rl.Color(255, 115, 0, int(255 * self._torque_line_alpha_filter.x)),  # orange
+        max(0, abs(self._torque_filter.x) - 0.75) * 4,
+      )
 
-    if ui_state.status != UIStatus.ENGAGED and not self._demo and not ui_state.dp_alka_active:
-      start_color = end_color = rl.Color(255, 255, 255, int(255 * 0.35 * self._torque_line_alpha_filter.x))
+      if ui_state.status != UIStatus.ENGAGED and not self._demo and not ui_state.dp_alka_active:
+        start_color = end_color = rl.Color(255, 255, 255, int(255 * 0.35 * self._torque_line_alpha_filter.x))
 
-    gradient = Gradient(
-      start=(start_grad_pt, 0),
-      end=(end_grad_pt, 0),
-      colors=[
-        start_color,
-        end_color,
-      ],
-      stops=[0.0, 1.0],
-    )
+      gradient = Gradient(
+        start=(start_grad_pt, 0),
+        end=(end_grad_pt, 0),
+        colors=[
+          start_color,
+          end_color,
+        ],
+        stops=[0.0, 1.0],
+      )
 
-    draw_polygon(rect, sl_pts, gradient=gradient)
+      draw_polygon(rect, sl_pts, gradient=gradient)
 
     # draw center torque bar dot
     if abs(self._torque_filter.x) < 0.5:
       dot_y = rect.y + rect.height - torque_line_offset - torque_line_height / 2
-      rl.draw_circle(int(cx), int(dot_y), int(10 * self._scale) // 2,
+      rl.draw_circle(int(cx), int(dot_y), int(10 * scale) // 2,
                      rl.Color(182, 182, 182, int(255 * 0.9 * self._torque_line_alpha_filter.x)))
