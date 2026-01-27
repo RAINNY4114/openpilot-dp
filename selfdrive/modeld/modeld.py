@@ -65,7 +65,7 @@ def _resolve_tinygrad_paths(params: Params) -> tuple[Path, Path, Path, Path, boo
       )
   return (VISION_METADATA_PATH, POLICY_METADATA_PATH, VISION_PKL_PATH, POLICY_PKL_PATH, False)
 
-LAT_SMOOTH_SECONDS = 0.1
+LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
 
@@ -830,3 +830,4 @@ if __name__ == "__main__":
     main(demo=args.demo)
   except KeyboardInterrupt:
     cloudlog.warning("got SIGINT")
+
