@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, UTC
 from openpilot.system.hardware.hw import Paths
 from openpilot.system.version import get_version
 
-API_HOST = os.getenv('API_HOST', 'https://api.commadotai.com')
+API_HOST = os.getenv('API_HOST', 'https://api.konik.ai')
 
 # name: jwt signature algorithm
 KEYS = {"id_rsa": "RS256",
@@ -60,3 +60,4 @@ def get_key_pair() -> tuple[str, str, str] | tuple[None, None, None]:
       with open(Paths.persist_root() + f'/comma/{key}') as private, open(Paths.persist_root() + f'/comma/{key}.pub') as public:
         return KEYS[key], private.read(), public.read()
   return None, None, None
+
