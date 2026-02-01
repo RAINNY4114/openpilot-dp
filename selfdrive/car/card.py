@@ -139,7 +139,8 @@ class Car:
       self.RI = RadarInterface(self.CI.CP)
 
     self.CP.alternativeExperience = 0
-    if dp_params & structs.DPFlags.LateralALKA:
+    mads_enabled = self.params.get_bool("Mads")
+    if (dp_params & structs.DPFlags.LateralALKA) or mads_enabled:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALKA
 
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")

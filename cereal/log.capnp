@@ -2639,8 +2639,8 @@ struct Event {
     dpControlsState @107 :Custom.DpControlsState;
     modelExt @108 :Custom.ModelExt;
     modelManagerSP @109 :Custom.ModelManagerSP;
-    customReserved3 @110 :Custom.CustomReserved3;
-    customReserved4 @111 :Custom.CustomReserved4;
+    onroadEventsSP @110 :Custom.OnroadEventSP;
+    selfdriveStateSP @111 :Custom.SelfdriveStateSP;
     customReserved5 @112 :Custom.CustomReserved5;
     customReserved6 @113 :Custom.CustomReserved6;
     customReserved7 @114 :Custom.CustomReserved7;

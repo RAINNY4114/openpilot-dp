@@ -26,6 +26,7 @@ _services: dict[str, tuple] = {
   "can": (True, 100., 2053),  # decimation gives ~3 msgs in a full segment
   "controlsState": (True, 100., 10),
   "selfdriveState": (True, 100., 10),
+  "selfdriveStateSP": (True, 100., 10),
   "pandaStates": (True, 10., 1),
   "peripheralState": (True, 2., 1),
   "radarState": (True, 20., 5),
@@ -56,6 +57,7 @@ _services: dict[str, tuple] = {
   "cameraOdometry": (True, 20., 10),
   "thumbnail": (True, 1 / 60., 1),
   "onroadEvents": (True, 1., 1),
+  "onroadEventsSP": (True, 1., 1),
   "carParams": (True, 0.02, 1),
   "roadCameraState": (True, 20., 20),
   "driverCameraState": (True, 20., 20),
