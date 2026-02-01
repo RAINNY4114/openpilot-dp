@@ -192,6 +192,13 @@ class LincolnLayout(Widget):
         decimals=1,
         suffix=tr(" m"),
       ),
+      simple_item(title=lambda: tr("### MADS ###")),
+      toggle_item(
+        title=lambda: tr("Auto Lateral Centering (MADS)"),
+        description=lambda: tr("Enable lateral centering when the cruise main switch becomes available. Longitudinal control still requires SET/RES."),
+        initial_state=self._params.get_bool("Mads"),
+        callback=lambda val: self._params.put_bool("Mads", val),
+      ),
       simple_item(title=lambda: tr("### HUD & Visualization ###")),
       toggle_item(
         title=lambda: tr("HUD drawing enhancements"),
