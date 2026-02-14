@@ -91,9 +91,12 @@ class CarState(CarStateBase):
     # gear
     if self.CP.transmissionType == TransmissionType.automatic:
       if self.use_alt_gear:
-        gear = self.shifter_values.get(cp.vl["TransGearData"]["GearLvrPos_D_Actl"])
+        raw_gear = cp.vl["TransGearData"]["GearLvrPos_D_Actl"]
       else:
-        gear = self.shifter_values.get(cp.vl["PowertrainData_10"]["TrnRng_D_Rq"])
+        raw_gear = cp.vl["PowertrainData_10"]["TrnRng_D_Rq"]
+      gear = self.shifter_values.get(raw_gear)
+      if gear is None and raw_gear in (4, 5):
+        gear = "drive"
       ret.gearShifter = self.parse_gear_shifter(gear)
     elif self.CP.transmissionType == TransmissionType.manual:
       if bool(cp.vl["BCM_Lamp_Stat_FD1"]["RvrseLghtOn_B_Stat"]):
