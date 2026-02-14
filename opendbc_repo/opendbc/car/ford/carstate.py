@@ -94,10 +94,19 @@ class CarState(CarStateBase):
         raw_gear = cp.vl["TransGearData"]["GearLvrPos_D_Actl"]
       else:
         raw_gear = cp.vl["PowertrainData_10"]["TrnRng_D_Rq"]
-        if raw_gear == 1:
-            ret.gearShifter = GearShifter.reverse
-        elif raw_gear == 3, 4, 5:
-            ret.gearShifter = self.parse_gear_shifter(gear)
+      shifter_values = {
+          0: "park",
+          1: "reverse",
+          2: "neutral",
+          3: "drive",
+          4: "sport",      # 关键：添加 Sport 映射
+          5: "low",
+      }
+      gear_str = shifter_values.get(raw_gear)
+      if gear_str is not None:
+          ret.gearShifter = self.parse_gear_shifter(gear_str)
+      else:
+          ret.gearShifter = GearShifter.unknown
     elif self.CP.transmissionType == TransmissionType.manual:
       if bool(cp.vl["BCM_Lamp_Stat_FD1"]["RvrseLghtOn_B_Stat"]):
         ret.gearShifter = GearShifter.reverse
