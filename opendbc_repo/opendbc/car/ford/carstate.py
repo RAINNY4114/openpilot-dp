@@ -88,17 +88,14 @@ class CarState(CarStateBase):
     if not self.CP.openpilotLongitudinalControl:
       ret.accFaulted = ret.accFaulted or cp_cam.vl["ACCDATA"]["CmbbDeny_B_Actl"] == 1
 
-    # gear
+   # gear
     if self.CP.transmissionType == TransmissionType.automatic:
-      if self.use_alt_gear:
-        raw_gear = cp.vl["TransGearData"]["GearLvrPos_D_Actl"]
-      else:
-        raw_gear = cp.vl["PowertrainData_10"]["TrnRng_D_Rq"]
-      gear = self.shifter_values.get(raw_gear)
-      if gear is None and raw_gear in (3, 4, 5):
-        gear = "drive"
-      ret.gearShifter = self.parse_gear_shifter(gear)
+        if (cp.vl["TransGearData"]["GearLvrPos_D_Actl"] in (3, 4, 5)):
+          ret.gearShifter = GearShifter.drive
+        elif (cp.vl["TransGearData"]["GearLvrPos_D_Actl"] == 1):
+          ret.gearShifter = GearShifter.reverse
     elif self.CP.transmissionType == TransmissionType.manual:
+      ret.clutchPressed = cp.vl["Engine_Clutch_Data"]["CluPdlPos_Pc_Meas"] > 0
       if bool(cp.vl["BCM_Lamp_Stat_FD1"]["RvrseLghtOn_B_Stat"]):
         ret.gearShifter = GearShifter.reverse
       else:
