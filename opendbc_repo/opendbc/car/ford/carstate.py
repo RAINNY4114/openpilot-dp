@@ -95,7 +95,7 @@ class CarState(CarStateBase):
       else:
         raw_gear = cp.vl["PowertrainData_10"]["TrnRng_D_Rq"]
       gear = self.shifter_values.get(raw_gear)
-      if gear is None and raw_gear in (4, 5):
+      if gear is None and raw_gear in (3,4,5,6,7):
         gear = "drive"
       ret.gearShifter = self.parse_gear_shifter(gear)
     elif self.CP.transmissionType == TransmissionType.manual:
