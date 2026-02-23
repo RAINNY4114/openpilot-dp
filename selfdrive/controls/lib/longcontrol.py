@@ -53,7 +53,7 @@ class LongControl:
                              rate=1 / DT_CTRL)
     self.last_output_accel = 0.0
     self.max_accel_rate = 1.0      # 每秒最大加速度变化（防止暴冲）
-    self.max_decel_rate = 0.8      # 每秒最大减速度变化（防止猛刹）
+    self.max_decel_rate = 0.9      # 每秒最大减速度变化（防止猛刹）
 
   def reset(self):
     self.pid.reset()
@@ -78,7 +78,7 @@ class LongControl:
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:
-      output_accel = min(self.CP.startAccel, 1.0)  # 限制起步冲击
+      output_accel = min(self.CP.startAccel, 0.9)  # 限制起步冲击
       self.reset()
 
     else:  # LongCtrlState.pid
