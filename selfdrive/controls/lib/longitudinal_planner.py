@@ -25,7 +25,7 @@ from openpilot.selfdrive.modeld.lane_occupancy import compute_ego_lane_occupancy
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MAX_VALS = [2.6, 1.95, 1.55, 1.05, 0.78, 0.55, 0.40, 0.28, 0.20, 0.012]
-A_CRUISE_MAX_VALS_FORD = [3.0, 1.7, 1.3, 0.8, 0.6, 0.44, 0.32, 0.22, 0.16, 0.0078]
+A_CRUISE_MAX_VALS_FORD = [2.6, 1.95, 1.55, 1.05, 0.78, 0.55, 0.40, 0.28, 0.20, 0.012]
 A_CRUISE_MAX_BP = [0.,  3,   6.,  8.,  11., 15.,  20.,  25.,  30.,  55.]
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 ALLOW_THROTTLE_THRESHOLD = 0.4
@@ -799,5 +799,6 @@ class LongitudinalPlanner:
     longitudinalPlan.vTargetDEPRECATED = curve_target
 
     pm.send('longitudinalPlan', plan_send)
+
 
 
