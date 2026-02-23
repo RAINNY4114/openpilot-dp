@@ -52,6 +52,8 @@ class LongControl:
                              (CP.longitudinalTuning.kiBP, CP.longitudinalTuning.kiV),
                              rate=1 / DT_CTRL)
     self.last_output_accel = 0.0
+    self.max_accel_rate = 1.0      # 每秒最大加速度变化（防止暴冲）
+    self.max_decel_rate = 0.8      # 每秒最大减速度变化（防止猛刹）
 
   def reset(self):
     self.pid.reset()
