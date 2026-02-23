@@ -78,7 +78,7 @@ class LongControl:
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:
-      output_accel = self.CP.startAccel
+      output_accel = min(self.CP.startAccel, 1.0)  # 限制起步冲击
       self.reset()
 
     else:  # LongCtrlState.pid
