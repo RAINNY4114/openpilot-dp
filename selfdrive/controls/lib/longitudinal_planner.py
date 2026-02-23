@@ -24,7 +24,7 @@ from openpilot.selfdrive.modeld.cone_detections import decode_cone_detections
 from openpilot.selfdrive.modeld.lane_occupancy import compute_ego_lane_occupancy
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
-A_CRUISE_MAX_VALS = [3.0, 1.7, 1.3, 0.8, 0.6, 0.44, 0.32, 0.22, 0.16, 0.0078]
+A_CRUISE_MAX_VALS = [2.8, 1.9, 1.45, 0.95, 0.72, 0.50, 0.36, 0.25, 0.18, 0.01]
 A_CRUISE_MAX_VALS_FORD = [3.0, 1.7, 1.3, 0.8, 0.6, 0.44, 0.32, 0.22, 0.16, 0.0078]
 A_CRUISE_MAX_BP = [0.,  3,   6.,  8.,  11., 15.,  20.,  25.,  30.,  55.]
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
@@ -799,3 +799,4 @@ class LongitudinalPlanner:
     longitudinalPlan.vTargetDEPRECATED = curve_target
 
     pm.send('longitudinalPlan', plan_send)
+
