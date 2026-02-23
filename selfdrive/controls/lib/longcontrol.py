@@ -86,5 +86,14 @@ class LongControl:
       output_accel = self.pid.update(error, speed=CS.vEgo,
                                      feedforward=a_target)
 
-    self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
+    # 限制变化率（防止转速拉高）
+    delta = output_accel - self.last_output_accel
+    if delta > 0:
+      delta = min(delta, self.max_accel_rate * DT_CTRL)
+    else:
+      delta = max(delta, -self.max_decel_rate * DT_CTRL)
+    smoothed_accel = self.last_output_accel + delta
+    self.last_output_accel = np.clip(smoothed_accel,
+                                     accel_limits[0],
+                                     accel_limits[1])
     return self.last_output_accel
