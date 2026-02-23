@@ -52,8 +52,8 @@ class LongControl:
                              (CP.longitudinalTuning.kiBP, CP.longitudinalTuning.kiV),
                              rate=1 / DT_CTRL)
     self.last_output_accel = 0.0
-    self.max_accel_rate = 1.0      # 每秒最大加速度变化（防止暴冲）
-    self.max_decel_rate = 0.9      # 每秒最大减速度变化（防止猛刹）
+    self.max_accel_rate = 0.95      # 每秒最大加速度变化（防止暴冲）
+    self.max_decel_rate = 0.85      # 每秒最大减速度变化（防止猛刹）
 
   def reset(self):
     self.pid.reset()
@@ -74,15 +74,15 @@ class LongControl:
       output_accel = self.last_output_accel
       if output_accel > self.CP.stopAccel:
         output_accel = min(output_accel, 0.0)
-        output_accel -= self.CP.stoppingDecelRate * DT_CTRL
+        output_accel -= (self.CP.stoppingDecelRate * 0.75) * DT_CTRL
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:
-      output_accel = min(self.CP.startAccel, 0.9)  # 限制起步冲击
+      output_accel = min(self.CP.startAccel, 0.85)  # 限制起步冲击
       self.reset()
 
     else:  # LongCtrlState.pid
-      error = (a_target - CS.aEgo) * 1.05
+      error = (a_target - CS.aEgo) * 1.06
       output_accel = self.pid.update(error, speed=CS.vEgo,
                                      feedforward=a_target)
 
