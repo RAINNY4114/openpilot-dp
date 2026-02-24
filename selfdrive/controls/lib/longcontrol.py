@@ -48,53 +48,67 @@ class LongControl:
       (CP.longitudinalTuning.kiBP, CP.longitudinalTuning.kiV),
       rate=1 / DT_CTRL
     )
+
     self.last_output_accel = 0.0
+    self.aggressiveness = 0.4   # 初始偏舒适
 
   def reset(self):
     self.pid.reset()
 
   # ==========================================
-  # 智能 accel_rate（安全优先）
+  # 自适应驾驶人格
+  # ==========================================
+  def update_personality(self, v_ego, a_target, lead_dist):
+
+    target_factor = np.clip(abs(a_target) / 2.0, 0.0, 1.0)
+
+    dist_factor = 0.0
+    if lead_dist is not None:
+      dist_factor = np.clip((lead_dist - 10.0) / 40.0, 0.0, 1.0)
+
+    desired = 0.3 + 0.4 * target_factor + 0.3 * dist_factor
+
+    # 慢速平滑更新人格（避免跳变）
+    self.aggressiveness += (desired - self.aggressiveness) * 0.02
+
+  # ==========================================
+  # 连续插值 accel_rate
   # ==========================================
   def dynamic_accel_rate(self, v_ego, lead_dist):
 
-    speed_bp = [0., 15., 30.]
+    a = self.aggressiveness
 
-    # 加速变化率（高速更柔）
-    accel_speed_vals = [1.2, 1.0, 0.8]
-    max_accel_rate = np.interp(v_ego, speed_bp, accel_speed_vals)
+    # 舒适端
+    accel_soft = 1.2
+    decel_soft = 3.0
 
-    # 减速变化率（必须大）
-    decel_speed_vals = [2.8, 3.0, 3.5]
-    max_decel_rate = np.interp(v_ego, speed_bp, decel_speed_vals)
+    # 运动端
+    accel_sport = 2.2
+    decel_sport = 4.2
 
-    if lead_dist is not None:
-      dist_bp = [5., 15., 40.]
+    max_accel_rate = accel_soft * (1 - a) + accel_sport * a
+    max_decel_rate = decel_soft * (1 - a) + decel_sport * a
 
-      # 近距离减少加速
-      accel_factor_vals = [0.4, 0.8, 1.1]
-      accel_factor = np.interp(lead_dist, dist_bp, accel_factor_vals)
-      max_accel_rate *= accel_factor
-
-      # 近距离增强减速
-      decel_factor_vals = [2.0, 1.4, 1.0]
-      decel_factor = np.interp(lead_dist, dist_bp, decel_factor_vals)
-      max_decel_rate *= decel_factor
+    # 前车近时强制提高刹车
+    if lead_dist is not None and lead_dist < 15:
+      max_accel_rate *= 0.7
+      max_decel_rate *= 1.6
 
     return max_accel_rate, max_decel_rate
 
   # ==========================================
-  # 人类油门曲线（只压正加速度）
+  # 人类油门曲线（连续插值）
   # ==========================================
   def humanize_accel(self, accel):
 
     if accel > 0:
-      accel = accel * (1 - 0.25 * np.tanh(accel))
+      compress = 0.20 * (1 - self.aggressiveness)
+      accel = accel * (1 - compress * np.tanh(accel))
 
     return accel
 
   # ==========================================
-  # 主控制逻辑
+  # 主更新
   # ==========================================
   def update(self, active, CS, a_target, should_stop, accel_limits):
 
@@ -106,11 +120,9 @@ class LongControl:
       should_stop, CS.brakePressed,
       CS.cruiseState.standstill)
 
-    # ========= 状态机 =========
-
     if self.long_control_state == LongCtrlState.off:
       self.reset()
-      output_accel = 0.
+      return 0.0
 
     elif self.long_control_state == LongCtrlState.stopping:
       output_accel = self.last_output_accel
@@ -120,38 +132,33 @@ class LongControl:
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:
-      output_accel = min(self.CP.startAccel, 0.85)
+      output_accel = min(self.CP.startAccel, 0.9)
       self.reset()
 
     else:
-      # 城市灵敏，高速平滑
-      speed_factor = np.interp(CS.vEgo, [0., 20., 30.], [1.1, 1.05, 1.02])
-      error = (a_target - CS.aEgo) * speed_factor
+      error = a_target - CS.aEgo
+      output_accel = self.pid.update(error,
+                                     speed=CS.vEgo,
+                                     feedforward=a_target)
 
-      output_accel = self.pid.update(
-        error,
-        speed=CS.vEgo,
-        feedforward=a_target
-      )
-
-    # ========= 人类化油门 =========
-    output_accel = self.humanize_accel(output_accel)
-
-    # ========= 紧急制动直通 =========
-    if output_accel < -2.0:
-      self.last_output_accel = np.clip(output_accel,
-                                       accel_limits[0],
-                                       accel_limits[1])
-      return self.last_output_accel
-
-    # ========= 读取前车 =========
+    # 读取前车
     lead_dist = None
     if hasattr(CS, "leadOne") and CS.leadOne.status:
       lead_dist = CS.leadOne.dRel
 
+    # 更新人格
+    self.update_personality(CS.vEgo, a_target, lead_dist)
+
+    # 人类化油门
+    output_accel = self.humanize_accel(output_accel)
+
+    # 紧急制动直通
+    if output_accel < -2.2:
+      self.last_output_accel = output_accel
+      return np.clip(output_accel, accel_limits[0], accel_limits[1])
+
     max_accel_rate, max_decel_rate = self.dynamic_accel_rate(CS.vEgo, lead_dist)
 
-    # ========= 8AT 风格平滑 =========
     delta = output_accel - self.last_output_accel
 
     if delta > 0:
@@ -161,8 +168,7 @@ class LongControl:
 
     smoothed_accel = self.last_output_accel + delta
 
-    # Ford 防抖
-    if abs(smoothed_accel) < 0.02:
+    if abs(smoothed_accel) < 0.05:
       smoothed_accel = 0.0
 
     self.last_output_accel = np.clip(smoothed_accel,
