@@ -74,7 +74,7 @@ class LongControl:
       output_accel = self.last_output_accel
       if output_accel > self.CP.stopAccel:
         output_accel = min(output_accel, 0.0)
-        output_accel -= (self.CP.stoppingDecelRate * 0.75) * DT_CTRL
+        output_accel -= self.CP.stoppingDecelRate * DT_CTRL
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:
@@ -89,10 +89,16 @@ class LongControl:
     # 限制变化率（防止转速拉高）
     delta = output_accel - self.last_output_accel
     if delta > 0:
-      delta = min(delta, self.max_accel_rate * DT_CTRL)
+      delta = min(delta, 0.7 * self.max_accel_rate * DT_CTRL)
     else:
       delta = max(delta, -self.max_decel_rate * DT_CTRL)
     smoothed_accel = self.last_output_accel + delta
+
+    # ===== 在这里加 =====
+    if abs(smoothed_accel) < 0.03:
+        smoothed_accel = 0.0
+    # =====================
+    
     self.last_output_accel = np.clip(smoothed_accel,
                                      accel_limits[0],
                                      accel_limits[1])
