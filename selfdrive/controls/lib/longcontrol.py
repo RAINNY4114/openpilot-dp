@@ -1,11 +1,10 @@
 import numpy as np
 from cereal import car
 from openpilot.common.realtime import DT_CTRL
-from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N
 from openpilot.common.pid import PIDController
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
-CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
+CONTROL_N_T_IDX = ModelConstants.T_IDXS[:car.CarControl.Actuators.LongControlState.off+1]
 LongCtrlState = car.CarControl.Actuators.LongControlState
 
 def long_control_state_trans(CP, active, long_control_state, v_ego,
@@ -51,9 +50,7 @@ class LongControl:
     def reset(self):
         self.pid.reset()
 
-    # =========================
-    # 自适应驾驶人格更新
-    # =========================
+    # 自适应驾驶人格
     def update_personality(self, v_ego, a_target, lead_dist):
         target_factor = np.clip(abs(a_target) / 2.0, 0.0, 1.0)
         dist_factor = 0.0
@@ -62,17 +59,13 @@ class LongControl:
         desired = 0.3 + 0.4 * target_factor + 0.3 * dist_factor
         self.aggressiveness += (desired - self.aggressiveness) * 0.02
 
-    # =========================
     # 动态加减速率
-    # =========================
     def dynamic_accel_rate(self, v_ego, lead_dist):
         a = self.aggressiveness
 
-        # 基础加减速率
-        accel_soft = 1.2
-        decel_soft = 3.0
-        accel_sport = 2.2
-        decel_sport = 4.2
+        # 舒适端和运动端
+        accel_soft, decel_soft = 1.2, 3.0
+        accel_sport, decel_sport = 2.2, 4.2
 
         # 市区加速增强
         if v_ego < 15.0:
@@ -83,25 +76,21 @@ class LongControl:
         max_accel_rate = accel_soft * (1 - a) + accel_sport * a
         max_decel_rate = decel_soft * (1 - a) + decel_sport * a
 
-        # 前车近时强制提高刹车
+        # 前车近时提高制动
         if lead_dist is not None and lead_dist < 15:
             max_accel_rate *= 0.7
             max_decel_rate *= 1.6
 
         return max_accel_rate, max_decel_rate
 
-    # =========================
-    # 模拟人类油门曲线
-    # =========================
+    # 人类化油门曲线
     def humanize_accel(self, accel):
         if accel > 0:
             compress = 0.20 * (1 - self.aggressiveness)
             accel = accel * (1 - compress * np.tanh(accel))
         return accel
 
-    # =========================
-    # 主更新函数
-    # =========================
+    # 主更新
     def update(self, active, CS, a_target, should_stop, accel_limits):
         self.pid.neg_limit = accel_limits[0]
         self.pid.pos_limit = accel_limits[1]
@@ -131,7 +120,7 @@ class LongControl:
             error = a_target - CS.aEgo
             output_accel = self.pid.update(error, speed=CS.vEgo, feedforward=a_target)
 
-        # 前车距离
+        # 前车距离读取
         lead_dist = None
         if hasattr(CS, "leadOne") and CS.leadOne.status:
             lead_dist = CS.leadOne.dRel
@@ -147,9 +136,8 @@ class LongControl:
             self.last_output_accel = output_accel
             return np.clip(output_accel, accel_limits[0], accel_limits[1])
 
-        # 计算动态 accel_rate
+        # 动态 accel_rate
         max_accel_rate, max_decel_rate = self.dynamic_accel_rate(CS.vEgo, lead_dist)
-
         delta = output_accel - self.last_output_accel
         if delta > 0:
             delta = min(delta, max_accel_rate * DT_CTRL)
@@ -158,7 +146,7 @@ class LongControl:
 
         smoothed_accel = self.last_output_accel + delta
 
-        # 防止 0 附近震荡
+        # 防震荡
         if abs(smoothed_accel) < 0.05:
             smoothed_accel = 0.0
 
