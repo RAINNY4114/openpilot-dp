@@ -287,12 +287,17 @@ if CC.longActive and self.CP.brand == "ford":
     d_rel = float(lead.dRel)
     v_rel = float(lead.vRel)
 
-    if d_rel < 25.0:
-      distance_factor = np.clip((25.0 - d_rel) / 25.0, 0.0, 1.0)
-      accel_cmd -= 1.2 * distance_factor
+    # 1️⃣ TTC 风险制动（推荐主逻辑）
+    if v_rel < 0.0:
+      ttc = d_rel / max(-v_rel, 0.1)
 
-    if v_rel < -1.0:
-      accel_cmd += v_rel * 0.25
+      if ttc < 3.0:
+        risk = np.clip((3.0 - ttc) / 3.0, 0.0, 1.0)
+        accel_cmd -= 2.0 * risk
+
+    # 2️⃣ 超近距离保护（兜底）
+    if d_rel < 12.0:
+      accel_cmd -= 1.5
 
 accel_cmd = np.clip(accel_cmd, pid_accel_limits[0], pid_accel_limits[1])
 actuators.accel = float(accel_cmd)
@@ -395,5 +400,6 @@ def main():
 
 if __name__ == "__main__":
   main()
+
 
 
