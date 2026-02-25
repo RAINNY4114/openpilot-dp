@@ -146,9 +146,8 @@ class Controls:
     self.CI = interfaces[self.CP.carFingerprint](self.CP)
 
     self.sm = messaging.SubMaster(['liveDelay', 'liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
-                                   'selfdriveStateSP',
                                    'liveCalibration', 'livePose', 'longitudinalPlan', 'carState', 'carOutput',
-                                   'driverMonitoringState', 'onroadEvents', 'driverAssistance', 'radarState'], poll='selfdriveState')
+                                   'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState', 'dpControlsState'])
 
     self.steer_limited_by_safety = False
@@ -170,7 +169,6 @@ class Controls:
 
     self.alka_enabled = self.params.get_bool("dp_lat_alka")
     self.alka_active = False
-    self.mads_active = False
     self.htd = HumanTurnDetection()
     self.htd_state = HTDState.INACTIVE
 
@@ -215,11 +213,7 @@ class Controls:
     # Check which actuators can be enabled
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, 0.3) or CS.standstill
     self.alka_active = self.alka_enabled and CS.cruiseState.available and not standstill and CS.gearShifter != car.CarState.GearShifter.reverse
-    ss_sp = self.sm['selfdriveStateSP']
-    mads_available = bool(ss_sp.mads.available)
-    mads_active = bool(ss_sp.mads.active) if mads_available else False
-    self.mads_active = mads_active
-    lat_active = mads_active if mads_available else (self.sm['selfdriveState'].active or self.alka_active)
+    lat_active = self.sm['selfdriveState'].active or self.alka_active
     htd_allowed, self.htd_state = self.htd.update(lat_active, CS.steeringAngleDeg, CS.steeringTorque, CS.vEgo)
     lat_active = lat_active and htd_allowed
     CC.latActive = lat_active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
@@ -266,44 +260,46 @@ class Controls:
 
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
-    # accel PID loop
-# accel PID loop
-pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
+    actuators.accel = float(self.LoC.update(CC.longActive, CS, long_plan.aTarget, long_plan.shouldStop, pid_accel_limits))
 
-accel_cmd = float(self.LoC.update(
-  CC.longActive,
-  CS,
-  long_plan.aTarget,
-  long_plan.shouldStop,
-  pid_accel_limits
-))
+    # Steering PID loop and lateral MPC
+    # Reset desired curvature to current to avoid violating the limits on engage
+    new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
 
-# Ford/Lincoln 动态距离增强制动
-if CC.longActive and self.CP.brand == "ford":
-  radar_state = self.sm['radarState']
+    # Ford/Lincoln: when driving in the outermost lane (road edge/guardrail), bias away slightly to avoid
+    # hugging the edge. This is gated on road-edge detection and confident inner lane lines.
+    if (not CC.latActive) or getattr(self.CP, "brand", "") != "ford" or CS.leftBlinker or CS.rightBlinker:
+      self._road_edge_curv_correction = 0.0
+    else:
+      raw_corr = 0.0
+      if CS.vEgo > 8.0:
+        left_edge, right_edge = _road_edge_detected(model_v2)
+        raw_corr = _road_edge_lane_offset_curvature(model_v2, CS.vEgo, left_edge, right_edge)
 
-  if radar_state.leadOne.status:
-    lead = radar_state.leadOne
-    d_rel = float(lead.dRel)
-    v_rel = float(lead.vRel)
+      alpha = 0.03  # ~0.3s time constant @100Hz
+      self._road_edge_curv_correction = (1.0 - alpha) * float(self._road_edge_curv_correction) + alpha * float(raw_corr)
+      new_desired_curvature = float(new_desired_curvature) + float(self._road_edge_curv_correction)
 
-    # 1️⃣ TTC 风险制动（推荐主逻辑）
-    if v_rel < 0.0:
-      ttc = d_rel / max(-v_rel, 0.1)
+    self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
+    lat_delay = get_lat_delay(self.params, self.sm["liveDelay"].lateralDelay, self.CP.steerActuatorDelay) + LAT_SMOOTH_SECONDS
 
-      if ttc < 3.0:
-        risk = np.clip((3.0 - ttc) / 3.0, 0.0, 1.0)
-        accel_cmd -= 2.0 * risk
+    actuators.curvature = self.desired_curvature
+    steer, steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
+                                                       self.steer_limited_by_safety, self.desired_curvature,
+                                                       curvature_limited, lat_delay)
+    actuators.torque = float(steer)
+    actuators.steeringAngleDeg = float(steeringAngleDeg)
+    # Ensure no NaNs/Infs
+    for p in ACTUATOR_FIELDS:
+      attr = getattr(actuators, p)
+      if not isinstance(attr, Number):
+        continue
 
-    # 2️⃣ 超近距离保护（兜底）
-    if d_rel < 12.0:
-      accel_cmd -= 1.5
+      if not math.isfinite(attr):
+        cloudlog.error(f"actuators.{p} not finite {actuators.to_dict()}")
+        setattr(actuators, p, 0.0)
 
-accel_cmd = np.clip(accel_cmd, pid_accel_limits[0], pid_accel_limits[1])
-actuators.accel = float(accel_cmd)
-
-# Steering PID loop and lateral MPC
-new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
+    return CC, lac_log
 
   def publish(self, CC, lac_log):
     CS = self.sm['carState']
@@ -348,7 +344,7 @@ new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else se
     dat = messaging.new_message('dpControlsState')
     dat.valid = True
     ncs = dat.dpControlsState
-    ncs.alkaActive = self.mads_active or self.alka_active
+    ncs.alkaActive = self.alka_active
     self.pm.send('dpControlsState', dat)
 
     # controlsState
@@ -400,6 +396,3 @@ def main():
 
 if __name__ == "__main__":
   main()
-
-
-
