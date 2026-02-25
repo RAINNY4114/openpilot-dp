@@ -266,46 +266,39 @@ class Controls:
 
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
-    actuators.accel = float(self.LoC.update(CC.longActive, CS, long_plan.aTarget, long_plan.shouldStop, pid_accel_limits))
+    # accel PID loop
+# accel PID loop
+pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
 
-    # Steering PID loop and lateral MPC
-    # Reset desired curvature to current to avoid violating the limits on engage
-    new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
+accel_cmd = float(self.LoC.update(
+  CC.longActive,
+  CS,
+  long_plan.aTarget,
+  long_plan.shouldStop,
+  pid_accel_limits
+))
 
-    # Ford/Lincoln: when driving in the outermost lane (road edge/guardrail), bias away slightly to avoid
-    # hugging the edge. This is gated on road-edge detection and confident inner lane lines.
-    if (not CC.latActive) or getattr(self.CP, "brand", "") != "ford" or CS.leftBlinker or CS.rightBlinker:
-      self._road_edge_curv_correction = 0.0
-    else:
-      raw_corr = 0.0
-      if CS.vEgo > 8.0:
-        left_edge, right_edge = _road_edge_detected(model_v2)
-        raw_corr = _road_edge_lane_offset_curvature(model_v2, CS.vEgo, left_edge, right_edge)
+# Ford/Lincoln 动态距离增强制动
+if CC.longActive and self.CP.brand == "ford":
+  radar_state = self.sm['radarState']
 
-      alpha = 0.03  # ~0.3s time constant @100Hz
-      self._road_edge_curv_correction = (1.0 - alpha) * float(self._road_edge_curv_correction) + alpha * float(raw_corr)
-      new_desired_curvature = float(new_desired_curvature) + float(self._road_edge_curv_correction)
+  if radar_state.leadOne.status:
+    lead = radar_state.leadOne
+    d_rel = float(lead.dRel)
+    v_rel = float(lead.vRel)
 
-    self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
-    lat_delay = get_lat_delay(self.params, self.sm["liveDelay"].lateralDelay, self.CP.steerActuatorDelay) + LAT_SMOOTH_SECONDS
+    if d_rel < 25.0:
+      distance_factor = np.clip((25.0 - d_rel) / 25.0, 0.0, 1.0)
+      accel_cmd -= 1.2 * distance_factor
 
-    actuators.curvature = self.desired_curvature
-    steer, steeringAngleDeg, lac_log = self.LaC.update(CC.latActive, CS, self.VM, lp,
-                                                       self.steer_limited_by_safety, self.desired_curvature,
-                                                       curvature_limited, lat_delay)
-    actuators.torque = float(steer)
-    actuators.steeringAngleDeg = float(steeringAngleDeg)
-    # Ensure no NaNs/Infs
-    for p in ACTUATOR_FIELDS:
-      attr = getattr(actuators, p)
-      if not isinstance(attr, Number):
-        continue
+    if v_rel < -1.0:
+      accel_cmd += v_rel * 0.25
 
-      if not math.isfinite(attr):
-        cloudlog.error(f"actuators.{p} not finite {actuators.to_dict()}")
-        setattr(actuators, p, 0.0)
+accel_cmd = np.clip(accel_cmd, pid_accel_limits[0], pid_accel_limits[1])
+actuators.accel = float(accel_cmd)
 
-    return CC, lac_log
+# Steering PID loop and lateral MPC
+new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
 
   def publish(self, CC, lac_log):
     CS = self.sm['carState']
@@ -402,3 +395,4 @@ def main():
 
 if __name__ == "__main__":
   main()
+
