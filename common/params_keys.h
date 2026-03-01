@@ -134,6 +134,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"dp_dev_monitoring_disabled", {PERSISTENT, BOOL, "0"}},
     {"dp_dev_beep", {PERSISTENT, BOOL, "0"}},
     {"dp_lat_alka", {PERSISTENT, BOOL, "0"}},
+    {"Mads", {PERSISTENT, BOOL, "0"}},
+    {"MadsMainCruiseAllowed", {PERSISTENT, BOOL, "1"}},
+    {"MadsSteeringMode", {PERSISTENT, INT, "0"}},
+    {"MadsUnifiedEngagementMode", {PERSISTENT, BOOL, "1"}},
     {"dp_ui_display_mode", {PERSISTENT, INT, "0"}},
     {"dp_dev_model_selected", {PERSISTENT, STRING}},
     {"dp_dev_model_list", {PERSISTENT, STRING}},
@@ -195,6 +199,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"dp_lincoln_auto_overtake", {PERSISTENT, BOOL, "0"}},
     {"dp_lincoln_auto_overtake_min_cruise_kph", {PERSISTENT, INT, "90"}},
     {"dp_lincoln_auto_lc_confirm_delay_sec", {PERSISTENT, INT, "3"}},
+    {"dp_lincoln_auto_lc_edge_clearance_m", {PERSISTENT, STRING, "0.6"}},
     {"dp_lincoln_lane_preference", {PERSISTENT, INT, "0"}},
     {"dp_lincoln_stop_distance_m", {PERSISTENT, INT, "4"}},     // 最终刹停/红灯跟停的期望静止车距（米）
     {"dp_lincoln_hazard_alert", {PERSISTENT, BOOL, "0"}},
