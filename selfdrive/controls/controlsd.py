@@ -146,7 +146,6 @@ class Controls:
     self.CI = interfaces[self.CP.carFingerprint](self.CP)
 
     self.sm = messaging.SubMaster(['liveDelay', 'liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
-                                   'selfdriveStateSP',
                                    'liveCalibration', 'livePose', 'longitudinalPlan', 'carState', 'carOutput',
                                    'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState', 'dpControlsState'])
@@ -170,7 +169,6 @@ class Controls:
 
     self.alka_enabled = self.params.get_bool("dp_lat_alka")
     self.alka_active = False
-    self.mads_active = False
     self.htd = HumanTurnDetection()
     self.htd_state = HTDState.INACTIVE
 
@@ -215,11 +213,7 @@ class Controls:
     # Check which actuators can be enabled
     standstill = abs(CS.vEgo) <= max(self.CP.minSteerSpeed, 0.3) or CS.standstill
     self.alka_active = self.alka_enabled and CS.cruiseState.available and not standstill and CS.gearShifter != car.CarState.GearShifter.reverse
-    ss_sp = self.sm['selfdriveStateSP']
-    mads_available = bool(ss_sp.mads.available)
-    mads_active = bool(ss_sp.mads.active) if mads_available else False
-    self.mads_active = mads_active
-    lat_active = mads_active if mads_available else (self.sm['selfdriveState'].active or self.alka_active)
+    lat_active = self.sm['selfdriveState'].active or self.alka_active
     htd_allowed, self.htd_state = self.htd.update(lat_active, CS.steeringAngleDeg, CS.steeringTorque, CS.vEgo)
     lat_active = lat_active and htd_allowed
     CC.latActive = lat_active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
@@ -350,7 +344,7 @@ class Controls:
     dat = messaging.new_message('dpControlsState')
     dat.valid = True
     ncs = dat.dpControlsState
-    ncs.alkaActive = self.mads_active or self.alka_active
+    ncs.alkaActive = self.alka_active
     self.pm.send('dpControlsState', dat)
 
     # controlsState
