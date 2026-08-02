@@ -126,7 +126,8 @@ class CAR(Platforms):
     CarSpecs(mass=1625, wheelbase=2.67, steerRatio=17.7),
   )
   FORD_EDGE_MK2 = FordPlatformConfig(
-    [FordCarDocs("Ford Edge 2022")],
+    [FordCarDocs("Ford Edge 2022")
+     FordCarDocs("Lincoln Nautilus 2018-21", "Adaptive Cruise Control with Lane Centering")],    
     CarSpecs(mass=1933, steerRatio=15.3, wheelbase=2.824),
     flags=FordFlags.ALT_STEER_ANGLE,
   )
@@ -149,6 +150,7 @@ class CAR(Platforms):
     [
       FordCarDocs("Ford Explorer 2020-24", hybrid=True),  # Hybrid: Limited and Platinum only
       FordCarDocs("Lincoln Aviator 2020-24", "Co-Pilot360 Plus", plug_in_hybrid=True),  # Hybrid: Grand Touring only
+      FordCarDocs("Lincoln Nautilus 2018-21", "Adaptive Cruise Control with Lane Centering")
     ],
     CarSpecs(mass=2050, wheelbase=3.025, steerRatio=16.8),
   )
