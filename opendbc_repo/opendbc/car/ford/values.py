@@ -126,13 +126,7 @@ class CAR(Platforms):
   FORD_BRONCO_SPORT_MK1 = FordPlatformConfig(
     [FordCarDocs("Ford Bronco Sport 2021-24")],
     CarSpecs(mass=1625, wheelbase=2.67, steerRatio=17.7),
-  )
-  FORD_EDGE_MK2 = FordPlatformConfig(
-    [FordCarDocs("Ford Edge 2022"), 
-     FordCarDocs("Lincoln Nautilus 2018-21", "Adaptive Cruise Control with Lane Centering")],    
-    CarSpecs(mass=2050, wheelbase=3.025, steerRatio=19.33),
-    flags=FordFlags.ALT_STEER_ANGLE,
-  )
+  )  
   FORD_ESCAPE_MK4 = FordPlatformConfig(
     [
       FordCarDocs("Ford Escape 2020-22", hybrid=True, plug_in_hybrid=True),
