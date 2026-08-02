@@ -75,7 +75,7 @@ class CarState(CarStateBase):
 
     if self.CP.flags & FordFlags.CANFD:
       # this signal is always 0 on non-CAN FD cars
-      ret.steerFaultTemporary |= cp.vl["Lane_Assist_Data3_FD1"]["LatCtlSte_D_Stat"] not in (1, 2, 3
+      ret.steerFaultTemporary |= cp.vl["Lane_Assist_Data3_FD1"]["LatCtlSte_D_Stat"] not in (1, 2, 3)
 
     # cruise state
     is_metric = cp.vl["INSTRUMENT_PANEL"]["METRIC_UNITS"] == 1 if not self.CP.flags & FordFlags.CANFD else False
