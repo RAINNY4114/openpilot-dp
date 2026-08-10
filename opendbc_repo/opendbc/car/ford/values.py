@@ -51,6 +51,7 @@ class FordSafetyFlags(IntFlag):
 class FordFlags(IntFlag):
   # Static flags
   CANFD = 1
+  ALT_STEER_ANGLE = 2
 
 
 class RADAR:
