@@ -85,9 +85,9 @@ class FordCarDocs(CarDocs):
 
 @dataclass
 class FordPlatformConfig(PlatformConfig):
-  dbc_dict: DbcDict = field(default_factory=lambda: {
-    Bus.pt: 'ford_lincoln_base_pt',
-    Bus.radar: RADAR.DELPHI_MRR,
+    dbc_dict: DbcDict = field(default_factory=lambda: {
+        Bus.pt: 'ford_lincoln_base_pt',
+        Bus.radar: RADAR.DELPHI_MRR,
   })
 
   def init(self):
