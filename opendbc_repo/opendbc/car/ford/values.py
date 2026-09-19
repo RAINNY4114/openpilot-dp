@@ -58,6 +58,7 @@ class FordFlags(IntFlag):
 class RADAR:
   DELPHI_ESR = 'ford_fusion_2018_adas'
   DELPHI_MRR = 'FORD_CADS'
+  MR76 = 'MR76'
 
 
 class Footnote(Enum):
@@ -184,7 +185,7 @@ class CAR(Platforms):
     [FordCarDocs("Ford Ranger 2024", "Adaptive Cruise Control with Lane Centering", setup_video="https://www.youtube.com/watch?v=2oJlXCKYOy0")],
     CarSpecs(mass=2000, wheelbase=3.27, steerRatio=17.0),
   )
-  LINCOLN_NAUTILUS_MKX = FordPlatformConfig(
+  LINCOLN_NAUTILUS = FordPlatformConfig(
     [FordCarDocs("Lincoln Nautilus 2018-21", "Adaptive Cruise Control with Lane Centering")],
     CarSpecs(mass=2050, wheelbase=3.025, steerRatio=19.33),
   )
