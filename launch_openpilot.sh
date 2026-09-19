@@ -10,5 +10,7 @@ export NAVMODEL=true
 
 # ==========================
 
+export FINGERPRINT="FORD_EXPLORER_MK6"
+export SKIP_FW_QUERY="1"
 
 exec ./launch_chffrplus.sh
